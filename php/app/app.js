@@ -244,7 +244,6 @@ function moveWithin(kind, groupIdx, i, dir) {
 	if (j === undefined) return;
 	const list = S[kind];
 	[list[i], list[j]] = [list[j], list[i]];
-	if (kind === "radios") S.moved = true;
 	renderAll();
 }
 
@@ -283,7 +282,6 @@ function enableDrag(li, kind) {
 				const [it] = list.splice(from, 1);
 				it.category = list[to > from ? to - 1 : to].category;   // dropping into a folder moves it there
 				list.splice(to > from ? to - 1 : to, 0, it);
-				if (kind === "radios") S.moved = true;
 				renderAll();
 			}
 		};
@@ -380,6 +378,37 @@ function editPodcast(i) {
 	};
 }
 $("#addPodcast").addEventListener("click", () => editPodcast(null));
+
+/* podcast search: Apple's iTunes directory, as Sleep Radio does */
+$("#podSearch").addEventListener("submit", async (e) => {
+	e.preventDefault();
+	const q = $("#pq").value.trim(), st = $("#podStatus");
+	if (!q) return;
+	st.className = "msg"; st.textContent = "Searching…";
+	try {
+		const d = await api("podsearch", { params: { q } });
+		st.textContent = d.results.length ? `${d.results.length} podcasts` : "Nothing found. Try other words.";
+		$("#podResults").replaceChildren(...d.results.map(p => {
+			const have = S.podcasts.some(x => x.url === p.url);
+			const btn = el("button", { class: have ? "" : "primary", text: have ? "✓ In your list" : "+ Add", disabled: have ? true : null,
+				onclick: () => {
+					S.podcasts.push({ name: p.name, url: p.url, type: "rss", finalurl: false, proxy: false, category: "" });
+					btn.textContent = "✓ Added"; btn.disabled = true; btn.className = "";
+					renderAll();
+					toast(`Added "${p.name}". Press Save to send it to the radio.`);
+				} });
+			return el("li", { class: "item" },
+				logoBox(p.logo, p.name),
+				el("div", { class: "info" },
+					el("b", { text: p.name }),
+					el("small", { text: [p.author, p.genre].filter(Boolean).join(" · ") }),
+					p.episodes ? el("div", { class: "tags" }, el("span", { class: "tag", text: p.episodes + " episodes" })) : null),
+				el("div", { class: "acts" }, btn));
+		}));
+	} catch (err) {
+		if (err.message !== "login") { st.className = "msg bad"; st.textContent = "✗ " + err.message; }
+	}
+});
 
 // Cancel buttons are type=button so Enter in a dialog means OK, not Cancel
 $$(".cancelBtn").forEach(b => b.addEventListener("click", () => b.closest("dialog").close("cancel")));

@@ -26,7 +26,8 @@ class Data {
 	 */
 	public function __construct(int $id, bool $preload = false ){
 		$this->id = $id;
-		$this->redis = new Cache('radios_podcasts.' . $this->id );
+		// fork: ".v2" because items are now keyed by their stable "sid" (old cache was keyed by position)
+		$this->redis = new Cache('radios_podcasts.v2.' . $this->id );
 		$this->own_streams = new OwnStreams();
 		
 		if( !$this->redis->keyExists( 'types' ) || $preload ){
@@ -48,7 +49,7 @@ class Data {
 				rename(__DIR__ . '/../data/radios_'. $this->id .'.json', __DIR__ . '/../data/radios_'. $this->id .'.error.json');
 			}
 		}
-		$this->radio = is_null($radio) ? array() : $radio;
+		$this->radio = self::ensureSids(is_null($radio) ? array() : $radio);
 
 		$podcasts = null;
 		if(is_file( __DIR__ . '/../data/podcasts_'. $this->id .'.json' )){
@@ -57,7 +58,7 @@ class Data {
 				rename(__DIR__ . '/../data/podcasts_'. $this->id .'.json', __DIR__ . '/../data/podcasts_'. $this->id .'.error.json');
 			}
 		}
-		$this->podcasts = is_null($podcasts) ?  array() : $podcasts;
+		$this->podcasts = self::ensureSids(is_null($podcasts) ?  array() : $podcasts);
 
 		$this->preloaded = true;
 	}
@@ -99,14 +100,88 @@ class Data {
 	 * 	Helper for constructTable
 	 */
 	private function addTypeToTable( int $tid, array $data ) : void{
-		foreach( $data as $id => $d ){
-			$idd = $id + 1000 * $tid;
+		// fork: the ID the radio sees (and keeps in its presets) is the item's stable "sid",
+		//	not its position, so moving or deleting items does not change other presets.
+		//	"pos" keeps the list order so the radio can show items in that order.
+		$data = self::ensureSids(array_values($data));
+		foreach( $data as $pos => $d ){
+			$idd = $d['sid'] + 1000 * $tid;
 			$this->table['items'][$idd] = $d;
 			$this->table['items'][$idd]['tid'] = $tid;
-			if( $id >= 999 ){ // only 999 per type!!
+			$this->table['items'][$idd]['pos'] = $pos;
+			if( $pos >= 998 ){ // only 999 per type!!
 				break;
 			}
 		}
+	}
+
+	/**
+	 * fork: give every item a stable id "sid" (0 - 998), which the radio uses for presets.
+	 * 	- items that already have a valid, unused sid keep it
+	 * 	- items without one take the sid of the same item in $old (same url, else same name),
+	 * 		so a page that does not know about sids (the classic /gui/) keeps them too
+	 * 	- a list with no sids at all (from before this fork) gets sid = position,
+	 * 		which is exactly the id the radio used before, so existing presets keep working
+	 * 	- anything else gets the next unused number (numbers of deleted items are only
+	 * 		reused once all 999 have been used)
+	 */
+	public static function ensureSids(array $list, array $old = array()) : array {
+		$list = array_values($list);
+		$valid = fn($v) => is_int($v) && $v >= 0 && $v <= 998;
+
+		$anySid = false;
+		foreach(array_merge($list, $old) as $it){
+			if(is_array($it) && isset($it['sid']) && $valid($it['sid'])){ $anySid = true; break; }
+		}
+		if(!$anySid){
+			foreach($list as $pos => &$it){ $it['sid'] = min($pos, 998); }
+			unset($it);
+			return $list;
+		}
+
+		$used = array();
+		foreach($list as $pos => &$it){ // keep valid, unique sids
+			if(isset($it['sid']) && $valid($it['sid']) && !isset($used[$it['sid']])){
+				$used[$it['sid']] = true;
+			}
+			else {
+				unset($it['sid']);
+			}
+		}
+		unset($it);
+
+		$oldFree = array_values(array_filter($old, fn($o) => is_array($o) && isset($o['sid']) && $valid($o['sid'])));
+		foreach(array('url', 'name') as $field){ // inherit from the previous version of the list
+			foreach($list as &$it){
+				if(isset($it['sid'])) continue;
+				foreach($oldFree as $k => $o){
+					if(($o[$field] ?? null) === ($it[$field] ?? false) && !isset($used[$o['sid']])){
+						$it['sid'] = $o['sid'];
+						$used[$o['sid']] = true;
+						unset($oldFree[$k]);
+						break;
+					}
+				}
+			}
+			unset($it);
+		}
+
+		$max = -1;
+		foreach(array_merge($list, $old) as $it){
+			if(is_array($it) && isset($it['sid']) && $valid($it['sid'])) $max = max($max, $it['sid']);
+		}
+		foreach($list as &$it){ // new items: next number, then lowest free
+			if(isset($it['sid'])) continue;
+			$n = $max + 1;
+			if($n > 998 || isset($used[$n])){
+				for($n = 0; $n <= 998 && isset($used[$n]); $n++);
+			}
+			$it['sid'] = min($n, 998);
+			$used[$it['sid']] = true;
+			$max = max($max, $it['sid']);
+		}
+		unset($it);
+		return $list;
 	}
 
 	/**
@@ -210,12 +285,18 @@ class Data {
 		return $this->podcasts;
 	}
 	public function setRadioList(array $radios) : void {
-		$this->radio = $radios;
+		if(!$this->preloaded){
+			$this->preloadAll();
+		}
+		$this->radio = self::ensureSids($radios, $this->radio);
 		file_put_contents( __DIR__ . '/../data/radios_'. $this->id .'.json', json_encode($this->radio, JSON_PRETTY_PRINT), LOCK_EX);
 		$this->constructTable(); // update redis
 	}
 	public function setPodcastList(array $pods) : void {
-		$this->podcasts = $pods;
+		if(!$this->preloaded){
+			$this->preloadAll();
+		}
+		$this->podcasts = self::ensureSids($pods, $this->podcasts);
 		file_put_contents( __DIR__ . '/../data/podcasts_'. $this->id .'.json', json_encode($this->podcasts, JSON_PRETTY_PRINT), LOCK_EX);
 		$this->constructTable(); // update redis
 	}

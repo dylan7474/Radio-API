@@ -52,7 +52,8 @@ $v = htmlspecialchars(Config::VERSION);
 				<button id="addStation" class="primary">+ Add a station</button>
 				<input id="filterStations" type="search" placeholder="Filter your stations">
 			</div>
-			<p class="hint" id="presetHint" hidden>⚠ Moving or deleting stations changes which station the radio's presets play, because the radio remembers a preset by its position in this list.</p>
+			<p class="hint">The radio shows folders first, then your stations in this order. Presets stay with their station when you move it.</p>
+			<p class="hint" id="presetHint" hidden>⚠ You deleted a station. If it was on a preset, that preset stops working until you store a new one on it.</p>
 			<ol id="stationList" class="items"></ol>
 			<p class="empty" id="stationsEmpty" hidden>No stations yet. Use <b>Find stations</b> or <b>+ Add a station</b>.</p>
 		</div>
@@ -80,9 +81,15 @@ $v = htmlspecialchars(Config::VERSION);
 		</div>
 
 		<div id="tab-podcasts" class="tab" hidden>
-			<div class="toolbar">
-				<button id="addPodcast" class="primary">+ Add a podcast</button>
-			</div>
+			<form id="podSearch" class="searchbar">
+				<input id="pq" type="search" placeholder="Find a podcast, e.g. In Our Time">
+				<button class="primary" type="submit">Search</button>
+				<button id="addPodcast" type="button">+ Add by feed address</button>
+			</form>
+			<p class="hint">Podcasts are found in Apple's podcast directory (iTunes), the same one Sleep Radio uses.</p>
+			<div id="podStatus" class="msg"></div>
+			<ol id="podResults" class="items results"></ol>
+			<h2 class="listhead" id="podListHead">Your podcasts</h2>
 			<ol id="podcastList" class="items"></ol>
 			<p class="empty" id="podcastsEmpty" hidden>No podcasts yet. Add one with its RSS feed address.</p>
 		</div>

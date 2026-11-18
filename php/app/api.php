@@ -38,6 +38,12 @@ function cleanCategory($v) : string {
 	return $v === '' ? '' : Inner::filterCategory($v);
 }
 
+// the stable id the radio uses for presets (see Data::ensureSids); only kept if valid
+function keepSid(array $item) : array {
+	return isset($item['sid']) && is_int($item['sid']) && $item['sid'] >= 0 && $item['sid'] <= 998
+		? array('sid' => $item['sid']) : array();
+}
+
 $login = new Login();
 $action = str($_GET['a'] ?? '');
 $isPost = $_SERVER['REQUEST_METHOD'] === 'POST';
@@ -90,11 +96,12 @@ switch($action){
 				'proxy' => !empty($r['proxy']),
 				'type' => str($r['type'] ?? '') === 'nc' ? 'nc' : 'radio',
 				'category' => cleanCategory($r['category'] ?? '')
-			);
+			) + keepSid($r);
 			if(count($out) >= 999) break;
 		}
-		(new Data($id))->setRadioList($out);
-		reply(array('ok' => true, 'radios' => $out));
+		$data = new Data($id);
+		$data->setRadioList($out);
+		reply(array('ok' => true, 'radios' => array_values($data->getRadioList())));
 
 	case 'podcasts':
 		if(!$isPost) reply(array('ok' => false), 405);
@@ -110,11 +117,12 @@ switch($action){
 				'proxy' => !empty($p['proxy']),
 				'type' => str($p['type'] ?? '') === 'nc' ? 'nc' : 'rss',
 				'category' => cleanCategory($p['category'] ?? '')
-			);
+			) + keepSid($p);
 			if(count($out) >= 999) break;
 		}
-		(new Data($id))->setPodcastList($out);
-		reply(array('ok' => true, 'podcasts' => $out));
+		$data = new Data($id);
+		$data->setPodcastList($out);
+		reply(array('ok' => true, 'podcasts' => array_values($data->getPodcastList())));
 
 	case 'search':
 		$rb = new RadioBrowser($id);
@@ -134,11 +142,64 @@ switch($action){
 		usort($last, fn($a, $b) => ($b['time'] ?? 0) <=> ($a['time'] ?? 0));
 		reply(array('ok' => true, 'results' => $last));
 
+	case 'podsearch':
+		reply(podcastSearch(str($_GET['q'] ?? '')));
+
 	case 'probe':
 		reply(probe(str($_GET['url'] ?? '')));
 
 	default:
 		reply(array('ok' => false, 'error' => 'unknown action'), 404);
+}
+
+/**
+ * Find podcasts with Apple's iTunes Search API (free, no key): the same directory
+ * and the same request SleepRadioPi uses (sleepradiopi/playback/podcasts.py).
+ */
+function podcastSearch(string $q) : array {
+	$q = trim(substr($q, 0, 200));
+	if($q === ''){
+		return array('ok' => true, 'results' => array());
+	}
+	$cache = new Cache('podcast-search');
+	$key = 'q.' . sha1(strtolower($q));
+	if($cache->keyExists($key)){
+		return array('ok' => true, 'results' => $cache->arrayGet($key));
+	}
+	$ch = curl_init('https://itunes.apple.com/search?media=podcast&entity=podcast&limit=30&term=' . rawurlencode($q));
+	curl_setopt_array($ch, array(
+		CURLOPT_RETURNTRANSFER => true,
+		CURLOPT_CONNECTTIMEOUT => 5,
+		CURLOPT_TIMEOUT => 15,
+		CURLOPT_USERAGENT => 'Radio-API/' . Config::VERSION,
+		CURLOPT_HTTPHEADER => array('Accept: application/json'),
+		CURLOPT_PROTOCOLS => CURLPROTO_HTTPS
+	));
+	$raw = curl_exec($ch);
+	$status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+	unset($ch);
+	$data = is_string($raw) ? json_decode($raw, true) : null;
+	if($status !== 200 || !is_array($data)){
+		return array('ok' => false, 'error' => 'The podcast directory (iTunes) did not answer');
+	}
+	$out = array();
+	$seen = array();
+	foreach($data['results'] ?? array() as $o){
+		$url = trim(str($o['feedUrl'] ?? ''));
+		$title = trim(html_entity_decode(str($o['collectionName'] ?? $o['trackName'] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+		if($url === '' || $title === '' || isset($seen[$url]) || !preg_match('#^https?://#i', $url)) continue;
+		$seen[$url] = true;
+		$out[] = array(
+			'name' => mb_substr($title, 0, 200),
+			'url' => $url,
+			'author' => mb_substr(trim(str($o['artistName'] ?? '')), 0, 200),
+			'logo' => str($o['artworkUrl100'] ?? ''),
+			'genre' => str($o['primaryGenreName'] ?? ''),
+			'episodes' => intval($o['trackCount'] ?? 0)
+		);
+	}
+	$cache->arraySet($key, $out, 3600);
+	return array('ok' => true, 'results' => $out);
 }
 
 /**
