@@ -77,26 +77,26 @@ function metaBlock(string $title) : string {
 
 $untilMeta = $metaint;
 $gone = false;
-foreach( $tracks as $t ){
-	$trackAlbum = $shuffling ? Music::albumOf($t) : $album;
-	$metaBlock = metaBlock(Music::title($t) . ($trackAlbum !== '' ? ' - ' . $trackAlbum : ''));
-	// each track to MP3 (no ID3 tag / Xing header in the middle of the stream)
-	// at playing speed (FLAC converts ~50x faster): a radio that left is noticed within seconds,
-	// and nothing races ahead through an album or the shuffled library. The first track gets a
-	// 10 s head start so the radio starts quickly; later ones only need to keep up.
-	$cmd = array('ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin',
-		'-readrate', '1', '-readrate_initial_burst', $t === $tracks[0] ? '10' : '2', '-i', Music::abs($t),
-		'-map', '0:a:0', '-vn', '-ac', '2', '-ar', '44100', '-c:a', 'libmp3lame', '-b:a', '192k',
-		'-id3v2_version', '0', '-write_xing', '0', '-f', 'mp3', 'pipe:1');
+$sent = 0;          // audio bytes sent (192 kbit/s = 24000 bytes a second)
+$started = null;
+
+/**
+ * Run one ffmpeg and pass its MP3 on, with the now-playing text. False if the radio left.
+ */
+function pipeOut(array $cmd, string $metaBlock) : bool {
+	global $icy, $metaint, $untilMeta, $sent, $started;
 	$proc = proc_open($cmd, array(0 => array('file', '/dev/null', 'r'), 1 => array('pipe', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
 	if( !is_resource($proc) ){
-		continue;
+		return true;
 	}
 	$out = $pipes[1];
+	$stay = true;
 	while( !feof($out) ){
 		$chunk = fread($out, 8192);
 		if( $chunk === false ) break;
 		if( $chunk === '' ){ usleep(20000); continue; }
+		$started = $started ?? microtime(true);
+		$sent += strlen($chunk);
 		if( $icy ){
 			while( strlen($chunk) >= $untilMeta ){
 				echo substr($chunk, 0, $untilMeta), $metaBlock;
@@ -107,7 +107,7 @@ foreach( $tracks as $t ){
 		}
 		echo $chunk;
 		flush();
-		if( connection_aborted() ){ $gone = true; break; }
+		if( connection_aborted() ){ $stay = false; break; }
 	}
 	fclose($out);
 	if( proc_get_status($proc)['running'] ){
@@ -116,6 +116,32 @@ foreach( $tracks as $t ){
 		if( proc_get_status($proc)['running'] ) proc_terminate($proc, 9);
 	}
 	proc_close($proc);
-	if( $gone ) break;
+	return $stay;
+}
+
+$metaBlock = '';
+foreach( $tracks as $t ){
+	$trackAlbum = $shuffling ? Music::albumOf($t) : $album;
+	$metaBlock = metaBlock(Music::title($t) . ($trackAlbum !== '' ? ' - ' . $trackAlbum : ''));
+	// each track to MP3 (no ID3 tag / Xing header in the middle of the stream), at playing speed
+	// (FLAC converts ~50x faster): a radio that left is noticed within seconds, and nothing races
+	// ahead. The first track gets a 6 s head start so the radio starts quickly.
+	$cmd = array('ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin',
+		'-readrate', '1', '-readrate_initial_burst', $t === $tracks[0] ? '6' : '2', '-i', Music::abs($t),
+		'-map', '0:a:0', '-vn', '-ac', '2', '-ar', '44100', '-c:a', 'libmp3lame', '-b:a', '192k',
+		'-id3v2_version', '0', '-write_xing', '0', '-f', 'mp3', 'pipe:1');
+	if( !pipeOut($cmd, $metaBlock) ){ $gone = true; break; }
+}
+
+// The radio is still playing what it has buffered (the head start). A radio treats a closed
+// connection as the end of the station and drops its buffer, which cut off the end of every
+// track. So stay connected with silence until it has played everything, then close.
+if( !$gone && !is_null($started) ){
+	$ahead = $sent / 24000 - (microtime(true) - $started);
+	if( $ahead > 0.3 ){
+		pipeOut(array('ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin', '-readrate', '1',
+			'-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo', '-t', sprintf('%.1f', $ahead + 4), // +4 s: radios wait to fill their buffer before playing
+			'-c:a', 'libmp3lame', '-b:a', '192k', '-id3v2_version', '0', '-write_xing', '0', '-f', 'mp3', 'pipe:1'), $metaBlock);
+	}
 }
 ?>
