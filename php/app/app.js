@@ -585,7 +585,9 @@ function renderRecent() {
 		const ago = Math.round((Date.now() - when) / 60000);
 		const agoText = ago < 1 ? "just now" : ago < 60 ? ago + " min ago" : ago < 1440 ? Math.round(ago / 60) + " h ago" : when.toLocaleDateString();
 		let action;
-		if (listed) {
+		if (e.kind === "mu") {
+			action = null;   // from the Music menu: nothing to add
+		} else if (listed) {
 			action = el("button", { class: "star" + (listed.fav ? " on" : ""), "aria-pressed": listed.fav ? "true" : "false",
 				title: listed.fav ? "In Favourites" : "Add to Favourites",
 				text: listed.fav ? "★ Favourite" : "☆ Favourite", onclick: () => { listed.fav = !listed.fav; renderAll(); renderRecent(); } });
@@ -602,9 +604,9 @@ function renderRecent() {
 			logoBox(e.logo, e.name),
 			el("div", { class: "info" },
 				el("b", { text: e.name }),
-				el("small", { text: agoText + (e.kind === "rb" ? " · from Radio-Browser" : listed ? " · in your stations" : "") })),
+				el("small", { text: agoText + (e.kind === "rb" ? " · from Radio-Browser" : e.kind === "mu" ? " · from Music" : listed ? " · in your stations" : "") })),
 			el("div", { class: "acts" },
-				el("button", { "aria-label": "Listen to " + e.name, title: "Listen here", text: S.playingKey === key ? "■" : "▶",
+				e.kind === "mu" ? null : el("button", { "aria-label": "Listen to " + e.name, title: "Listen here", text: S.playingKey === key ? "■" : "▶",
 					class: S.playingKey === key ? "playing" : "", onclick: () => togglePlay(key, e) }),
 				action));
 	}));

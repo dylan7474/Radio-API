@@ -42,6 +42,11 @@ class RadioLogo {
 			return self::BASE_URL . 'station.png'; // fork: our neutral radio icon, not the KIMB logo
 		}
 		
+		// fork: our own addresses (album art from music.php, media/...) are already local
+		if(str_starts_with($logo, Config::RADIO_DOMAIN) || str_starts_with($logo, Config::DOMAIN)){
+			return $logo;
+		}
+
 		// fork: the station's own stored copy (media/logos/), served as a plain file
 		$local = self::localFile($logo);
 		if(!is_null($local)){

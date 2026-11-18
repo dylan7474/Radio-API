@@ -42,8 +42,13 @@ class Router {
 			$currentUrl = Config::RADIO_DOMAIN . '?sSearchtype=' . $_GET['sSearchtype'] . '&Search=' . $_GET['Search'];
 			$play = isset($_GET['play']);
 
+			// fork: a music library folder or track?
+			if( preg_match(Music::ID_PREG, $_GET['Search']) === 1 ){
+				$this->listMusicItem($_GET['Search'], $play);
+				$this->out->currentUrl($currentUrl, 'Play Music');
+			}
 			// is an ID from Radio-Browser??
-			if( RadioBrowser::matchStationID($_GET['Search']) ){ 
+			else if( RadioBrowser::matchStationID($_GET['Search']) ){ 
 				$this->radio_browser->handleStationPlay($this->out, $_GET['Search'], $play);
 				$this->out->currentUrl($currentUrl, 'Play Station');
 			}
@@ -71,6 +76,10 @@ class Router {
 		else if( !empty($_GET['toggleUnRead']) && is_string($_GET['toggleUnRead']) ){
 			$this->out->addDir('TOGGLE-UN-READ-' . $this->unread->toggleById($_GET['toggleUnRead'], $this->data), '');
 			// GUI only, so no current URL needed
+		}
+		// fork: the music library (folders -> albums -> tracks)
+		else if( $uri == '/music' ){
+			$this->listMusic(isset($_GET['id']) && is_string($_GET['id']) ? $_GET['id'] : '');
 		}
 		// fork: favourites and recently played
 		else if( $uri == '/list' && isset($_GET['fav']) ){
@@ -129,6 +138,9 @@ class Router {
 			}
 			if( count((new Recent($this->radioId->getId()))->list()) > 0 ){
 				$this->out->addDir( 'Recently played', Config::RADIO_DOMAIN . 'list?recent=1', sortKey: '1' );
+			}
+			if( Music::available() ){
+				$this->out->addDir( 'Music', Config::RADIO_DOMAIN . 'music', sortKey: '2' );
 			}
 
 			// add code (for gui)
@@ -288,6 +300,68 @@ class Router {
 	}
 
 	/**
+	 * fork: one folder of the music library: its folders, then "Play all" and its tracks
+	 */
+	private function listMusic(string $id) : void {
+		$rel = $id === '' ? '' : Music::pathFor($id);
+		if(is_null($rel)){
+			$this->out->prevUrl(Config::RADIO_DOMAIN . '?go=initial');
+			$this->out->addDir('Not found - the music may have moved', Config::RADIO_DOMAIN . 'music');
+			return;
+		}
+		$name = $rel === '' ? 'Music' : basename($rel);
+		$this->out->currentUrl(Config::RADIO_DOMAIN . 'music' . ($rel === '' ? '' : '?id=' . Music::idFor($rel)), $name);
+		$parent = $rel === '' ? null : (dirname($rel) === '.' ? '' : dirname($rel));
+		$this->out->prevUrl(is_null($parent) ? Config::RADIO_DOMAIN . '?go=initial'
+			: Config::RADIO_DOMAIN . 'music' . ($parent === '' ? '' : '?id=' . Music::idFor($parent)));
+
+		$e = Music::entries($rel);
+		foreach($e['dirs'] as $d){
+			$this->out->addDir(basename($d), Config::RADIO_DOMAIN . 'music?id=' . Music::idFor($d));
+		}
+		$mac = $this->radioId->getMac();
+		if($rel !== '' && (count($e['tracks']) > 1 || (count($e['tracks']) > 0 && count($e['dirs']) > 0)
+				|| (count($e['tracks']) === 0 && count(Music::tracksUnder($rel)) > 0 && count($e['dirs']) <= 4))){
+			$all = Music::tracksUnder($rel);
+			$this->out->addStation(Music::idFor($rel), 'Play all - ' . count($all) . ' tracks',
+				Config::RADIO_DOMAIN . 'music.php?id=' . Music::idFor($rel) . '&mac=' . $mac,
+				OutputPlayStatus::Info, logo: Config::RADIO_DOMAIN . 'music.php?art=' . Music::idFor($rel), sortKey: '0000');
+		}
+		foreach($e['tracks'] as $n => $t){
+			$this->out->addStation(Music::idFor($t), Music::title($t),
+				Config::RADIO_DOMAIN . 'music.php?id=' . Music::idFor($t) . '&mac=' . $mac,
+				OutputPlayStatus::Info, logo: Config::RADIO_DOMAIN . 'music.php?art=' . Music::idFor($t),
+				sortKey: sprintf('%04d', $n + 1));
+		}
+		if(count($e['dirs']) === 0 && count($e['tracks']) === 0){
+			$this->out->addDir('Empty folder', Config::RADIO_DOMAIN . 'music');
+		}
+	}
+
+	/**
+	 * fork: play one music folder ("Play all") or track by its id
+	 */
+	private function listMusicItem(string $id, bool $play) : void {
+		$rel = Music::pathFor($id);
+		if(is_null($rel)){
+			$this->out->addDir('Not found - the music may have moved', Config::RADIO_DOMAIN . 'music');
+			return;
+		}
+		$isDir = is_dir(Music::abs($rel));
+		$parent = dirname($rel) === '.' ? '' : dirname($rel);
+		$this->out->prevUrl(Config::RADIO_DOMAIN . 'music' . ($isDir ? '?id=' . $id : ($parent === '' ? '' : '?id=' . Music::idFor($parent))));
+		$name = $isDir ? Music::albumOf($rel) : Music::title($rel);
+		$url = Config::RADIO_DOMAIN . 'music.php?id=' . $id . '&mac=' . $this->radioId->getMac();
+		$art = Config::RADIO_DOMAIN . 'music.php?art=' . $id;
+		$this->out->addStation($id, $name, $url,
+			status: $play ? OutputPlayStatus::Play : OutputPlayStatus::Full,
+			desc: $isDir ? count(Music::tracksUnder($rel)) . ' tracks' : Music::albumOf($rel), logo: $art);
+		if($play){
+			(new Recent($this->radioId->getId()))->add('mu', $id, $isDir ? 'Album: ' . $name : $name . ' - ' . Music::albumOf($rel), $url, $art);
+		}
+	}
+
+	/**
 	 * fork: stations with the star, in list order: [id => item]
 	 */
 	private function favourites() : array {
@@ -338,6 +412,11 @@ class Router {
 					$this->data->getStationURL(intval($e['id']), $this->radioId->getMac()),
 					OutputPlayStatus::Info, logo: $item['logo'] ?? '', sortKey: $key
 				);
+			}
+			else if($e['kind'] === 'mu' && !is_null(Music::pathFor($e['id']))){
+				$this->out->addStation($e['id'], $e['name'],
+					Config::RADIO_DOMAIN . 'music.php?id=' . $e['id'] . '&mac=' . $this->radioId->getMac(),
+					OutputPlayStatus::Info, logo: Config::RADIO_DOMAIN . 'music.php?art=' . $e['id'], sortKey: $key);
 			}
 			else if($e['kind'] === 'rb' && RadioBrowser::matchStationID($e['id'])){
 				$url = Relay::needed($e['url']) ? Relay::rbUrl($e['id'], $this->radioId->getMac()) : $e['url'];
