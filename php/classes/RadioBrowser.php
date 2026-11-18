@@ -385,6 +385,68 @@ class RadioBrowser {
 		);
 	}
 	
+	/**
+	 * Search with filters (used by the new web page in /app/).
+	 * 	$q: name, tag, countrycode, order (clickcount|votes|name|bitrate), limit
+	 * 	Broken stations (failed Radio-Browser's last check) are hidden.
+	 */
+	public function searchAdvanced(array $q) : array {
+		$this->before_request();
+
+		$params = array(
+			"hidebroken" => "true",
+			"limit" => max(1, min(100, intval($q["limit"] ?? self::RADIO_BROWSER_LIMIT)))
+		);
+		foreach(array("name", "tag", "countrycode") as $k){
+			if(!empty($q[$k]) && is_string($q[$k])){
+				$params[$k] = trim(substr($q[$k], 0, 100));
+			}
+		}
+		$order = $q["order"] ?? "clickcount";
+		$params["order"] = in_array($order, array("clickcount", "votes", "name", "bitrate"), true) ? $order : "clickcount";
+		$params["reverse"] = $params["order"] === "name" ? "false" : "true";
+
+		$stations = $this->run_request("stations/search", $params);
+		if($stations === false || !is_array($stations)){
+			return array();
+		}
+		return array_map(
+			fn($s) => array(
+				"name" => trim($s["name"] ?? ""),
+				"url" => !empty($s["url_resolved"]) ? $s["url_resolved"] : ($s["url"] ?? ""),
+				"logo" => $s["favicon"] ?? "",
+				"desc" => trim(implode(', ', array_filter(array($s["language"] ?? "", $s["tags"] ?? ""))), ', '), // country: the page adds a short name
+				"country" => $s["countrycode"] ?? "",
+				"codec" => $s["codec"] ?? "",
+				"bitrate" => intval($s["bitrate"] ?? 0),
+				"votes" => intval($s["votes"] ?? 0),
+				"clicks" => intval($s["clickcount"] ?? 0),
+				"homepage" => $s["homepage"] ?? ""
+			),
+			$stations
+		);
+	}
+
+	/**
+	 * Countries known to Radio-Browser: [ [code, name, stations], ... ] sorted by name
+	 */
+	public function countries() : array {
+		$this->before_request();
+
+		$list = $this->run_request("countries", array("hidebroken" => "true"));
+		if($list === false || !is_array($list)){
+			return array();
+		}
+		$out = array();
+		foreach($list as $c){
+			if(!empty($c["iso_3166_1"]) && ($c["stationcount"] ?? 0) > 0){
+				$out[$c["iso_3166_1"]] = array($c["iso_3166_1"], $c["name"], intval($c["stationcount"]));
+			}
+		}
+		usort($out, fn($a, $b) => strcasecmp($a[1], $b[1]));
+		return array_values($out);
+	}
+
 	public function handleStationPlay(Output $out, string $id, bool $play) : void {
 		$this->before_request($out);
 
