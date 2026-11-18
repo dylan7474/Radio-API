@@ -263,7 +263,7 @@ class Router {
 					$item['name'],
 					$this->data->getStationURL($id, $this->radioId->getMac()),
 					OutputPlayStatus::Info,
-					sortKey: self::orderKey($item) // fork: the order of the list, not A-Z
+					sortKey: self::orderKey($item)
 				);
 			}
 			else if($item['tid'] == 3){ // podcast
@@ -271,7 +271,7 @@ class Router {
 					$id,
 					$item['name'],
 					Config::RADIO_DOMAIN . 'list?tid=3&id=' . $id,
-					sortKey: self::orderKey($item) // fork: the order of the list, not A-Z
+					sortKey: self::orderKey($item)
 				);
 			}
 			else if ($item['tid'] == 2 && !$item['live']) { // file based "own stream"
@@ -363,10 +363,12 @@ class Router {
 	}
 
 	/**
-	 * fork: sort key that keeps the user's order (folders still come first: "dir==" < "pod=="/"ra==")
+	 * fork: sort key for items in lists (folders always come first: "dir==" < "pod=="/"ra==")
 	 */
 	private static function orderKey(array $item) : string {
-		return isset($item['pos']) ? sprintf('%04d', $item['pos']) : '';
+		// the user asked for A-Z on the radios (folders first): '' makes Output sort by name.
+		// (to follow the page's list order instead: sprintf('%04d', $item['pos']))
+		return '';
 	}
 }
 ?>

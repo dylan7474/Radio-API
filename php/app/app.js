@@ -247,11 +247,13 @@ $$(".tabs button").forEach(b => b.addEventListener("click", () => {
 
 /* ---------- grouping (top level first, then folders in order of first use) ---------- */
 
+// the radios show folders first (A-Z), then items A-Z by name: the page shows the same
+const byName = (a, b) => a.localeCompare(b, "en", { sensitivity: "base", numeric: true });
 function groups(list) {
-	const order = [""];
-	for (const it of list) if (!order.includes(it.category)) order.push(it.category);
-	return order
-		.map(cat => ({ cat, idx: list.map((it, i) => it.category === cat ? i : -1).filter(i => i >= 0) }))
+	const cats = [...new Set(list.map(it => it.category).filter(Boolean))].sort(byName);
+	return cats.concat([""])
+		.map(cat => ({ cat, idx: list.map((it, i) => it.category === cat ? i : -1).filter(i => i >= 0)
+			.sort((x, y) => byName(list[x].name, list[y].name)) }))
 		.filter(g => g.idx.length);
 }
 
@@ -267,16 +269,17 @@ function renderStations() {
 	const sig = r => r.name + "|" + r.url + "|" + r.category + "|" + !!r.fav;
 	const savedByUrl = new Set(JSON.parse(S.saved.radios).map(sig));
 	list.replaceChildren();
-	for (const g of groups(S.radios)) {
+	const gs = groups(S.radios);
+	for (const g of gs) {
 		const rows = g.idx.filter(i => !filter || (S.radios[i].name + " " + S.radios[i].desc).toLowerCase().includes(filter));
 		if (!rows.length) continue;
 		if (g.cat) list.append(el("li", { class: "folder", text: g.cat }));
+		else if (gs.length > 1) list.append(el("li", { class: "folder nofolder", text: "Not in a folder" }));
 		rows.forEach((i, pos) => {
 			const r = S.radios[i];
 			const key = "r" + i;
 			const changed = !savedByUrl.has(sig(r));
 			const li = el("li", { class: "item" + (changed ? " changed" : ""), "data-i": i },
-				el("span", { class: "handle", title: "Drag to move", "aria-hidden": "true", text: "⠿" }),
 				logoBox(r.logo, r.name),
 				el("div", { class: "info" },
 					el("b", { text: r.name }),
@@ -296,10 +299,7 @@ function renderStations() {
 						"aria-label": (r.fav ? "Remove from Favourites: " : "Add to Favourites: ") + r.name, "aria-pressed": r.fav ? "true" : "false",
 						text: r.fav ? "★" : "☆", onclick: () => { r.fav = !r.fav; renderAll(); } }),
 					el("button", { text: "Edit", onclick: () => editStation(i) }),
-					el("button", { title: "Move up", "aria-label": "Move up", text: "↑", disabled: pos === 0 && !filter ? true : null, onclick: () => moveWithin("radios", g.idx, i, -1) }),
-					el("button", { title: "Move down", "aria-label": "Move down", text: "↓", disabled: pos === rows.length - 1 && !filter ? true : null, onclick: () => moveWithin("radios", g.idx, i, 1) }),
 					el("button", { title: "Delete", "aria-label": "Delete " + r.name, text: "✕", onclick: () => removeItem("radios", i) })));
-			enableDrag(li, "radios");
 			list.append(li);
 		});
 	}
@@ -310,57 +310,12 @@ function renderStations() {
 
 $("#filterStations").addEventListener("input", renderStations);
 
-function moveWithin(kind, groupIdx, i, dir) {
-	const pos = groupIdx.indexOf(i);
-	const j = groupIdx[pos + dir];
-	if (j === undefined) return;
-	const list = S[kind];
-	[list[i], list[j]] = [list[j], list[i]];
-	renderAll();
-}
-
 async function removeItem(kind, i) {
 	const it = S[kind][i];
 	if (!(await confirmBox(`Delete "${it.name}"? (Nothing is lost until you press Save.)`, "Delete"))) return;
 	S[kind].splice(i, 1);
 	if (kind === "radios") S.moved = true;
 	renderAll();
-}
-
-/* drag and drop with pointer events: works with a mouse and on a phone */
-function enableDrag(li, kind) {
-	const handle = $(".handle", li);
-	handle.addEventListener("pointerdown", (e) => {
-		e.preventDefault();
-		const from = +li.dataset.i;
-		let target = null;
-		li.classList.add("dragging");
-		handle.setPointerCapture(e.pointerId);
-		const move = (ev) => {
-			const over = document.elementFromPoint(ev.clientX, ev.clientY)?.closest(".item");
-			$$(".dropbefore").forEach(x => x.classList.remove("dropbefore"));
-			target = over && over !== li && over.parentElement === li.parentElement ? over : null;
-			if (target) target.classList.add("dropbefore");
-			if (ev.clientY < 80) window.scrollBy(0, -12);
-			else if (ev.clientY > innerHeight - 80) window.scrollBy(0, 12);
-		};
-		const up = () => {
-			handle.removeEventListener("pointermove", move);
-			li.classList.remove("dragging");
-			$$(".dropbefore").forEach(x => x.classList.remove("dropbefore"));
-			if (target) {
-				const to = +target.dataset.i;
-				const list = S[kind];
-				const [it] = list.splice(from, 1);
-				it.category = list[to > from ? to - 1 : to].category;   // dropping into a folder moves it there
-				list.splice(to > from ? to - 1 : to, 0, it);
-				renderAll();
-			}
-		};
-		handle.addEventListener("pointermove", move);
-		handle.addEventListener("pointerup", up, { once: true });
-		handle.addEventListener("pointercancel", up, { once: true });
-	});
 }
 
 /* edit / add dialog */
@@ -411,12 +366,13 @@ $(".testBtn", $("#stationForm")).addEventListener("click", async () => {
 function renderPodcasts() {
 	const list = $("#podcastList");
 	list.replaceChildren();
-	for (const g of groups(S.podcasts)) {
+	const gs = groups(S.podcasts);
+	for (const g of gs) {
 		if (g.cat) list.append(el("li", { class: "folder", text: g.cat }));
+		else if (gs.length > 1) list.append(el("li", { class: "folder nofolder", text: "Not in a folder" }));
 		g.idx.forEach((i, pos) => {
 			const p = S.podcasts[i];
 			const li = el("li", { class: "item", "data-i": i },
-				el("span", { class: "handle", title: "Drag to move", "aria-hidden": "true", text: "⠿" }),
 				logoBox("", p.name),
 				el("div", { class: "info" },
 					el("b", { text: p.name }),
@@ -427,10 +383,7 @@ function renderPodcasts() {
 						p.proxy ? el("span", { class: "tag", text: "through phobos" }) : null)),
 				el("div", { class: "acts" },
 					el("button", { text: "Edit", onclick: () => editPodcast(i) }),
-					el("button", { title: "Move up", "aria-label": "Move up", text: "↑", disabled: pos === 0 ? true : null, onclick: () => moveWithin("podcasts", g.idx, i, -1) }),
-					el("button", { title: "Move down", "aria-label": "Move down", text: "↓", disabled: pos === g.idx.length - 1 ? true : null, onclick: () => moveWithin("podcasts", g.idx, i, 1) }),
 					el("button", { title: "Delete", "aria-label": "Delete " + p.name, text: "✕", onclick: () => removeItem("podcasts", i) })));
-			enableDrag(li, "podcasts");
 			list.append(li);
 		});
 	}

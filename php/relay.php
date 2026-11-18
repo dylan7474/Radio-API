@@ -66,8 +66,23 @@ header('X-Accel-Buffering: no'); // nginx: pass it on as it comes
 header('icy-name: ' . preg_replace('/[^ -~]/', '', $station['name'] ?? 'Radio'));
 header('icy-br: 128');
 
+// "now playing" text (ICY metadata), if the radio asks for it: the station's name and
+// description, so the radio shows that instead of "Not Specified"
+$metaint = 16000;
+$icy = ($_SERVER['HTTP_ICY_METADATA'] ?? '') === '1';
+$metaBlock = '';
+if( $icy ){
+	$title = trim(($station['name'] ?? '') . (empty($station['desc']) ? '' : ' - ' . $station['desc']));
+	$title = str_replace(array("'", ';', "\r", "\n"), array("\u{2019}", ',', ' ', ' '), mb_substr($title, 0, 200));
+	$meta = "StreamTitle='" . $title . "';";
+	$meta .= str_repeat("\0", (16 - strlen($meta) % 16) % 16);
+	$metaBlock = chr(intdiv(strlen($meta), 16)) . $meta;
+	header('icy-metaint: ' . $metaint);
+	header('icy-description: ' . preg_replace('/[^ -~]/', '', $station['desc'] ?? ''));
+}
+
 $out = $pipes[1];
-$sent = 0;
+$untilMeta = $metaint;
 while( !feof($out) ){
 	$chunk = fread($out, 8192);
 	if( $chunk === false ){
@@ -77,9 +92,16 @@ while( !feof($out) ){
 		usleep(20000);
 		continue;
 	}
+	if( $icy ){ // a metadata block after every $metaint bytes of audio
+		while( strlen($chunk) >= $untilMeta ){
+			echo substr($chunk, 0, $untilMeta), $metaBlock;
+			$chunk = substr($chunk, $untilMeta);
+			$untilMeta = $metaint;
+		}
+		$untilMeta -= strlen($chunk);
+	}
 	echo $chunk;
 	flush();
-	$sent += strlen($chunk);
 	if( connection_aborted() ){ // the radio stopped or changed station
 		break;
 	}
