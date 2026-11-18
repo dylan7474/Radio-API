@@ -315,6 +315,9 @@ class Data {
 			$this->preloadAll();
 		}
 		$this->radio = self::keepFlags(self::ensureSids($radios, $this->radio), $this->radio);
+		foreach($this->radio as $r){ // fork: keep a local copy of every logo (a failed one is tried again next save)
+			if(!empty($r['logo'])) RadioLogo::storeLocal($r['logo']);
+		}
 		file_put_contents( __DIR__ . '/../data/radios_'. $this->id .'.json', json_encode($this->radio, JSON_PRETTY_PRINT), LOCK_EX);
 		$this->constructTable(); // update redis
 	}

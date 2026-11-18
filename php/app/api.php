@@ -64,6 +64,16 @@ function knownRadios() : array {
 	return $out;
 }
 
+// for the page: "logo_local" = phobos's stored copy of the logo (or "" if it couldn't be stored yet)
+function withLocalLogos(array $list) : array {
+	foreach($list as &$r){
+		$f = empty($r['logo']) ? null : RadioLogo::localFile($r['logo']);
+		$r['logo_local'] = is_null($f) ? '' : '../media/logos/' . $f;
+	}
+	unset($r);
+	return $list;
+}
+
 // the stable id the radio uses for presets (see Data::ensureSids); only kept if valid
 function keepSid(array $item) : array {
 	return isset($item['sid']) && is_int($item['sid']) && $item['sid'] >= 0 && $item['sid'] <= 998
@@ -127,7 +137,7 @@ switch($action){
 			'id' => $id,
 			'name' => radioNames()[strval($id)] ?? '',
 			'version' => Config::VERSION,
-			'radios' => array_values($data->getRadioList()),
+			'radios' => withLocalLogos(array_values($data->getRadioList())),
 			'podcasts' => array_values($data->getPodcastList()),
 			'logoCache' => Config::USE_LOGO_CACHE,
 			'maxItems' => 999
@@ -156,7 +166,7 @@ switch($action){
 		}
 		$data = new Data($id);
 		$data->setRadioList($out);
-		reply(array('ok' => true, 'radios' => array_values($data->getRadioList())));
+		reply(array('ok' => true, 'radios' => withLocalLogos(array_values($data->getRadioList()))));
 
 	case 'podcasts':
 		if(!$isPost) reply(array('ok' => false), 405);
@@ -200,6 +210,8 @@ switch($action){
 				$item = $data->getById(intval($e['id']));
 				if($item === array()) continue; // deleted since
 				$e['name'] = $item['name']; $e['url'] = $item['url']; $e['logo'] = $item['logo'] ?? '';
+				$lf = RadioLogo::localFile($e['logo']);
+				if(!is_null($lf)) $e['logo'] = '../media/logos/' . $lf;
 				$e['sid'] = $item['sid'] ?? null;
 			}
 			$out[] = $e;

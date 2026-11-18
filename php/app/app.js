@@ -64,7 +64,7 @@ async function api(action, { body, params } = {}, retried = false) {
 function logoBox(url, name) {
 	const box = el("div", { class: "logo", "aria-hidden": "true" });
 	const initial = (name || "?").trim().charAt(0).toUpperCase() || "?";
-	if (url && /^https?:/i.test(url)) {
+	if (url && /^(https?:|\.\.\/media\/)/i.test(url)) {   // a web address, or phobos's stored copy
 		const img = el("img", { src: url, alt: "", loading: "lazy", referrerpolicy: "no-referrer" });
 		img.addEventListener("error", () => { box.textContent = initial; });
 		box.append(img);
@@ -280,12 +280,13 @@ function renderStations() {
 			const key = "r" + i;
 			const changed = !savedByUrl.has(sig(r));
 			const li = el("li", { class: "item" + (changed ? " changed" : ""), "data-i": i },
-				logoBox(r.logo, r.name),
+				logoBox(r.logo_local || r.logo, r.name),
 				el("div", { class: "info" },
 					el("b", { text: r.name }),
 					el("small", { text: r.desc || r.url }),
 					el("div", { class: "tags" },
 						r.fav ? el("span", { class: "tag", text: "★ Favourite" }) : null,
+						r.logo && !r.logo_local && !changed ? el("span", { class: "tag state warn", title: "phobos couldn't download it; it tries again at the next save", text: "logo not stored" }) : null,
 						r.type === "nc" ? el("span", { class: "tag", text: "Nextcloud files" }) : null,
 						r.proxy ? el("span", { class: "tag", text: "through phobos" }) : null,
 						r.relay ? el("span", { class: "tag", text: "converted on phobos" }) : null,
@@ -643,7 +644,7 @@ async function togglePlay(key, item, resolved = false) {
 	$("#player").hidden = false;
 	$("#pName").textContent = item.name;
 	$("#pNote").textContent = "Connecting…";
-	$("#pLogo").src = /^https?:/i.test(item.logo || "") ? item.logo : "";
+	$("#pLogo").src = item.logo_local || (/^(https?:|\.\.\/media\/)/i.test(item.logo || "") ? item.logo : "");
 	refreshPlayButtons();
 	let url = item.url;
 	const tryPlay = async (u) => { audio.src = u; await audio.play(); };
