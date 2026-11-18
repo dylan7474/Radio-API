@@ -22,7 +22,7 @@ class Music {
 	private const AUDIO = array('mp3', 'flac', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'wav', 'wma', 'aif', 'aiff');
 
 	public static function available() : bool {
-		return is_dir(self::ROOT) && count(self::entries('')) > 0;
+		return is_dir(self::ROOT) && count(self::entries('', false)['dirs']) + count(self::entries('', false)['tracks']) > 0;
 	}
 
 	public static function idFor(string $rel) : string {
@@ -55,7 +55,7 @@ class Music {
 	/**
 	 * One folder: ['dirs' => [rel...], 'tracks' => [rel...]], both in natural order
 	 */
-	public static function entries(string $rel) : array {
+	public static function entries(string $rel, bool $remember = true) : array {
 		$abs = self::abs($rel);
 		$out = array('dirs' => array(), 'tracks' => array());
 		if(is_null($abs) || !is_dir($abs)){
@@ -70,7 +70,9 @@ class Music {
 		$nat = fn($a, $b) => strnatcasecmp(basename($a), basename($b));
 		usort($out['dirs'], $nat);
 		usort($out['tracks'], $nat);
-		self::remember(array_merge(array($rel), $out['dirs'], $out['tracks']));
+		if($remember){ // only when a radio browses a folder: not for every folder of a whole-library scan
+			self::remember(array_merge(array($rel), $out['dirs'], $out['tracks']));
+		}
 		return $out;
 	}
 
@@ -78,7 +80,7 @@ class Music {
 	 * Every track in a folder and its subfolders (CD1, CD2, ...), in order
 	 */
 	public static function tracksUnder(string $rel, int $depth = 0) : array {
-		$e = self::entries($rel);
+		$e = self::entries($rel, false);
 		$tracks = $e['tracks'];
 		if($depth < 3){
 			foreach($e['dirs'] as $d){
@@ -103,12 +105,13 @@ class Music {
 		}
 		// not known yet (e.g. a preset after a restart): walk the library once
 		$found = self::walk('', $id, 0);
+		if(!is_null($found)) self::remember(array($found));
 		return $found;
 	}
 
 	private static function walk(string $rel, string $id, int $depth) : ?string {
 		if(self::idFor($rel) === $id) return $rel;
-		$e = self::entries($rel);
+		$e = self::entries($rel, false);
 		foreach($e['tracks'] as $t){
 			if(self::idFor($t) === $id) return $t;
 		}
