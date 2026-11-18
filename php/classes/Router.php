@@ -264,6 +264,20 @@ class Router {
 				);
 			}
 		}
+		$this->addEmptyNote($tid, $cat); // fork
+	}
+
+	/**
+	 * fork: a list with no entries makes JSON radios (e.g. Majority) show "network error",
+	 * 	so an empty folder gets one line that says where to add things.
+	 */
+	private function addEmptyNote(?int $tid, ?string $cat) : void {
+		$items = $this->data->getListOfItems($tid, $cat);
+		$folders = is_null($cat) && !is_null($tid) ? array_filter($this->data->getCategories($tid)) : array();
+		if(count($items) === 0 && count($folders) === 0){
+			$host = parse_url(Config::DOMAIN, PHP_URL_HOST) ?: 'the server';
+			$this->out->addDir('Empty - add at ' . $host . '/app', Config::RADIO_DOMAIN . '?go=initial');
+		}
 	}
 
 	/**
