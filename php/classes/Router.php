@@ -303,7 +303,6 @@ class Router {
 	 * fork: one folder of the music library: its folders, then "Play all" and its tracks
 	 */
 	private function listMusic(string $id) : void {
-		Music::debugLog('list'); // TEMPORARY button test
 		$rel = $id === '' ? '' : Music::pathFor($id);
 		if(is_null($rel)){
 			$this->out->prevUrl(Config::RADIO_DOMAIN . '?go=initial');
@@ -351,7 +350,6 @@ class Router {
 	 * fork: play one music folder ("Play all") or track by its id
 	 */
 	private function listMusicItem(string $id, bool $play) : void {
-		Music::debugLog('item'); // TEMPORARY button test
 		$rel = Music::pathFor($id);
 		if(is_null($rel)){
 			$this->out->addDir('Not found - the music may have moved', Config::RADIO_DOMAIN . 'music');
