@@ -21,6 +21,21 @@ class Music {
 	public const ID_PREG = '/^m[us][0-9a-f]{30}$/'; // mu = a folder/track, ms = shuffle that folder
 	private const AUDIO = array('mp3', 'flac', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'wav', 'wma', 'aif', 'aiff');
 
+	/**
+	 * TEMPORARY (button test 2026-11-18): every music request in full, to see whether a radio's
+	 * 	skip / rewind buttons can be told apart. Remove after the test.
+	 */
+	public static function debugLog(string $where) : void {
+		$h = array();
+		foreach($_SERVER as $k => $v){
+			if(str_starts_with($k, 'HTTP_') || in_array($k, array('REQUEST_METHOD', 'REQUEST_URI', 'REMOTE_ADDR', 'SERVER_PORT', 'HTTPS'), true)){
+				$h[$k] = is_string($v) ? $v : json_encode($v);
+			}
+		}
+		@file_put_contents(Config::LOG_DIR . '/music-buttons.log',
+			date('H:i:s') . sprintf('.%03d', (int)(fmod(microtime(true), 1) * 1000)) . " $where " . json_encode($h, JSON_UNESCAPED_SLASHES) . PHP_EOL, FILE_APPEND);
+	}
+
 	public static function available() : bool {
 		return is_dir(self::ROOT) && count(self::entries('', false)['dirs']) + count(self::entries('', false)['tracks']) > 0;
 	}

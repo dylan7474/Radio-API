@@ -32,6 +32,8 @@ if( isset($_GET['art']) ){
 	die();
 }
 
+Music::debugLog('stream'); // TEMPORARY button test
+
 $auth = new Auth();
 Config::checkAccess($auth->getClientID());
 $radioId = $auth->auth();
