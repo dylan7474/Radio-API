@@ -72,6 +72,9 @@ function logoBox(url, name) {
 	return box;
 }
 
+// HLS playlists (the BBC's) can't be played by the radio itself: convert them on phobos
+const needsRelay = (url) => /\.m3u8(\?|$)/i.test(url || "");
+
 const isDirty = (kind) => JSON.stringify(S[kind]) !== S.saved[kind];
 
 /* ---------- choosing the radio (no code: the page is LAN-only) ---------- */
@@ -281,6 +284,7 @@ function renderStations() {
 						r.fav ? el("span", { class: "tag", text: "★ Favourite" }) : null,
 						r.type === "nc" ? el("span", { class: "tag", text: "Nextcloud files" }) : null,
 						r.proxy ? el("span", { class: "tag", text: "through phobos" }) : null,
+						r.relay ? el("span", { class: "tag", text: "converted on phobos" }) : null,
 						changed ? el("span", { class: "tag state warn", text: "not saved" }) : null)),
 				el("div", { class: "acts" },
 					r.type === "nc" ? null : el("button", {
@@ -365,6 +369,7 @@ function editStation(i, preset = null) {
 	$("#stationDlgTitle").textContent = i === null ? "Add a station" : "Edit station";
 	f.name.value = r.name; f.url.value = r.url; f.logo.value = r.logo || ""; f.desc.value = r.desc || "";
 	f.category.value = r.category || ""; f.proxy.checked = !!r.proxy; f.nc.checked = r.type === "nc";
+	f.relay.checked = r.relay !== undefined ? !!r.relay : needsRelay(r.url);
 	$(".testMsg", f).textContent = ""; $(".testMsg", f).className = "msg testMsg";
 	$(".logoPreview", f).src = /^https?:/i.test(r.logo || "") ? r.logo : "";
 	dlg.returnValue = "";
@@ -373,7 +378,7 @@ function editStation(i, preset = null) {
 		if (dlg.returnValue !== "ok") return;
 		const item = {
 			name: f.name.value.trim(), url: f.url.value.trim(), logo: f.logo.value.trim(), desc: f.desc.value.trim(),
-			proxy: f.proxy.checked, type: f.nc.checked ? "nc" : "radio", category: f.category.value.trim(),
+			proxy: f.proxy.checked, relay: f.relay.checked, type: f.nc.checked ? "nc" : "radio", category: f.category.value.trim(),
 			fav: i === null ? !!(preset && preset.fav) : !!S.radios[i].fav
 		};
 		if (i !== null && S.radios[i].sid !== undefined) item.sid = S.radios[i].sid;
@@ -393,6 +398,10 @@ $(".testBtn", $("#stationForm")).addEventListener("click", async () => {
 		const d = await api("probe", { params: { url: f.url.value.trim() } });
 		m.className = "msg testMsg " + (d.ok ? "ok" : "bad");
 		m.textContent = (d.ok ? "✓ " : "✗ ") + d.note + (d.ok ? ". Press OK, then ▶ in the list to listen." : "");
+		if (d.ok && /HLS|wav/i.test(d.type || "")) {
+			f.relay.checked = true;
+			m.textContent += " The radio can't play this kind itself, so \"Convert on phobos\" is now ticked.";
+		}
 	} catch (err) { m.className = "msg testMsg bad"; m.textContent = "✗ " + err.message; }
 });
 
@@ -553,7 +562,7 @@ function renderResults(list, results, prefix) {
 		const addBtn = el("button", {
 			class: added ? "" : "primary", text: added ? "✓ In your list" : "+ Add", disabled: added ? true : null,
 			onclick: () => {
-				S.radios.push({ name: s.name, url: s.url, logo: s.logo || "", desc: stationDesc(s), proxy: false, type: "radio", category: "" });
+				S.radios.push({ name: s.name, url: s.url, logo: s.logo || "", desc: stationDesc(s), proxy: false, relay: needsRelay(s.url), type: "radio", category: "" });
 				addBtn.textContent = "✓ Added"; addBtn.disabled = true; addBtn.className = "";
 				renderAll();
 				toast(`Added "${s.name}". Press Save to send it to the radio.`);
@@ -603,7 +612,7 @@ function renderRecent() {
 				text: listed.fav ? "★ Favourite" : "☆ Favourite", onclick: () => { listed.fav = !listed.fav; renderAll(); renderRecent(); } });
 		} else {
 			action = el("button", { class: "primary", text: "+ Add", title: "Add to your stations", onclick: () => {
-				S.radios.push({ name: e.name, url: e.url, logo: e.logo || "", desc: "", proxy: false, type: "radio", category: "", fav: false });
+				S.radios.push({ name: e.name, url: e.url, logo: e.logo || "", desc: "", proxy: false, relay: needsRelay(e.url), type: "radio", category: "", fav: false });
 				renderAll(); renderRecent();
 				toast(`Added "${e.name}". Press Save to send it to the radio.`);
 			} });

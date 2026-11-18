@@ -122,8 +122,10 @@ class Data {
 		$bySid = array();
 		foreach($old as $o){ if(isset($o['sid'])) $bySid[$o['sid']] = $o; }
 		foreach($list as &$it){
-			if(!array_key_exists('fav', $it)){
-				$it['fav'] = !empty($bySid[$it['sid']]['fav']);
+			foreach(array('fav', 'relay') as $flag){
+				if(!array_key_exists($flag, $it)){
+					$it[$flag] = !empty($bySid[$it['sid']][$flag]);
+				}
 			}
 		}
 		unset($it);
@@ -250,6 +252,9 @@ class Data {
 		}
 		if(!empty($station['type']) && $station['type'] == 'nc' ){
 			return Config::RADIO_DOMAIN . 'm3u.php?id=' . $id . '&mac=' . $mac;
+		}
+		else if(!empty($station['relay'])){ // fork: converted to MP3 on the server (HLS, WAV)
+			return Config::RADIO_DOMAIN . 'relay.php?id=' . $id . '&mac=' . $mac;
 		}
 		else if(!empty($station['proxy'])){
 			return Config::RADIO_DOMAIN . 'stream.php?id=' . $id . '&mac=' . $mac;

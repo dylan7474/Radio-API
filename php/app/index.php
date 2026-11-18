@@ -133,6 +133,7 @@ $v = htmlspecialchars(Config::VERSION);
 		<datalist id="stationFolders"></datalist>
 		<fieldset>
 			<legend>Advanced</legend>
+			<label class="check"><input type="checkbox" name="relay"> Convert on phobos (for streams the radio can't play: BBC and other HLS .m3u8, or WAV)</label>
 			<label class="check"><input type="checkbox" name="proxy"> Play through phobos (for https streams the radio cannot open)</label>
 			<label class="check"><input type="checkbox" name="nc"> This is a Nextcloud share of music files, not a stream</label>
 		</fieldset>

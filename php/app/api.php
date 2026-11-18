@@ -148,6 +148,7 @@ switch($action){
 				'desc' => trim(str($r['desc'] ?? '')) === '' ? '' : Inner::filterName(trim(str($r['desc']))),
 				'proxy' => !empty($r['proxy']),
 				'fav' => !empty($r['fav']),
+				'relay' => !empty($r['relay']),
 				'type' => str($r['type'] ?? '') === 'nc' ? 'nc' : 'radio',
 				'category' => cleanCategory($r['category'] ?? '')
 			) + keepSid($r);
