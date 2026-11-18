@@ -124,3 +124,11 @@ dialog::backdrop { background: rgba(0,0,0,.45); }
 .codeform { display: flex; gap: .5rem; margin-top: .5rem; }
 .codeform input { flex: 1; letter-spacing: .1em; }
 #radioName { border: none; padding: .3rem .5rem; }
+
+.recent { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: .5rem .8rem; margin-bottom: .8rem; }
+.recent summary { cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: .5rem; }
+.recent summary button { margin-left: auto; }
+.recent ol { margin-top: .5rem; }
+button.small { padding: .15rem .5rem; font-size: .85rem; font-weight: normal; }
+button.star { font-size: 1.05rem; line-height: 1; }
+button.star.on { color: var(--warn); border-color: var(--warn); }

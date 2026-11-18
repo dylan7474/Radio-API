@@ -58,7 +58,11 @@ $v = htmlspecialchars(Config::VERSION);
 				<button id="addStation" class="primary">+ Add a station</button>
 				<input id="filterStations" type="search" placeholder="Filter your stations">
 			</div>
-			<p class="hint">The radio shows folders first, then your stations in this order. Presets stay with their station when you move it.</p>
+			<details id="recentBox" class="recent" hidden>
+				<summary>Recently played on the radio <button type="button" id="recentClear" class="quiet small">Clear</button></summary>
+				<ol id="recentList" class="items results"></ol>
+			</details>
+			<p class="hint">The radio shows ★ Favourites and Recently played at the top of its menu, then folders, then your stations in this order. Presets stay with their station when you move it.</p>
 			<p class="hint" id="presetHint" hidden>⚠ You deleted a station. If it was on a preset, that preset stops working until you store a new one on it.</p>
 			<ol id="stationList" class="items"></ol>
 			<p class="empty" id="stationsEmpty" hidden>No stations yet. Use <b>Find stations</b> or <b>+ Add a station</b>.</p>
@@ -80,10 +84,6 @@ $v = htmlspecialchars(Config::VERSION);
 			<p class="hint">Stations come from Radio-Browser. Stations that failed its last check are hidden. Press ▶ to listen here before adding.</p>
 			<div id="searchStatus" class="msg"></div>
 			<ol id="results" class="items results"></ol>
-			<details id="lastBox">
-				<summary>Recently played on the radio (from Radio-Browser)</summary>
-				<ol id="lastList" class="items results"></ol>
-			</details>
 		</div>
 
 		<div id="tab-podcasts" class="tab" hidden>

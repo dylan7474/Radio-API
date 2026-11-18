@@ -72,6 +72,13 @@ class Router {
 			$this->out->addDir('TOGGLE-UN-READ-' . $this->unread->toggleById($_GET['toggleUnRead'], $this->data), '');
 			// GUI only, so no current URL needed
 		}
+		// fork: favourites and recently played
+		else if( $uri == '/list' && isset($_GET['fav']) ){
+			$this->listFavourites();
+		}
+		else if( $uri == '/list' && isset($_GET['recent']) ){
+			$this->listRecent();
+		}
 		// list of stations or podcasts (= the type) and possibly selecting a category
 		else if( $uri == '/list' ){ 
 			$this->out->prevUrl(Config::RADIO_DOMAIN . '?go=initial');
@@ -115,6 +122,14 @@ class Router {
 			}
 			// add RadioBrowser
 			$this->out->addDir( 'Radio-Browser', Config::RADIO_DOMAIN . 'radio-browser?by=none&term=none' );
+
+			// fork: Favourites and Recently played first (sort keys "0", "1" come before names)
+			if( count($this->favourites()) > 0 ){
+				$this->out->addDir( 'Favourites', Config::RADIO_DOMAIN . 'list?fav=1', sortKey: '0' );
+			}
+			if( count((new Recent($this->radioId->getId()))->list()) > 0 ){
+				$this->out->addDir( 'Recently played', Config::RADIO_DOMAIN . 'list?recent=1', sortKey: '1' );
+			}
 
 			// add code (for gui)
 			$this->out->addDir( 'GUI-Code: ' . $this->radioId->getCode(), Config::RADIO_DOMAIN . '?go=initial', true );
@@ -166,6 +181,10 @@ class Router {
 			Config::RADIO_DOMAIN . 'list?tid=' . $tid .
 			(empty($sta['category']) ? '' : '&cat=' . rawurlencode($sta['category']))
 		);
+
+		if( $sta !== array() && $play ){ // fork: remember for "Recently played"
+			(new Recent($this->radioId->getId()))->add('own', strval($id), $sta['name'] ?? '', $sta['url'] ?? '', $sta['logo'] ?? '');
+		}
 
 		if( $sta !== array() ){
 			// radio station or stream with "live" == true
@@ -265,6 +284,68 @@ class Router {
 			}
 		}
 		$this->addEmptyNote($tid, $cat); // fork
+	}
+
+	/**
+	 * fork: stations with the star, in list order: [id => item]
+	 */
+	private function favourites() : array {
+		return array_filter(
+			$this->data->getListOfItems(1, null) + $this->allInFolders(1),
+			fn($i) => !empty($i['fav'])
+		);
+	}
+
+	private function allInFolders(int $tid) : array {
+		$out = array();
+		foreach($this->data->getCategories($tid) as $cat){
+			if($cat !== '' && $cat !== null) $out += $this->data->getListOfItems($tid, $cat);
+		}
+		return $out;
+	}
+
+	private function listFavourites() : void {
+		$this->out->prevUrl(Config::RADIO_DOMAIN . '?go=initial');
+		$this->out->currentUrl(Config::RADIO_DOMAIN . 'list?fav=1', 'Favourites');
+		$favs = $this->favourites();
+		foreach($favs as $id => $item){
+			$this->out->addStation(
+				$id, $item['name'],
+				$this->data->getStationURL($id, $this->radioId->getMac()),
+				OutputPlayStatus::Info,
+				sortKey: self::orderKey($item)
+			);
+		}
+		if(count($favs) === 0){
+			$host = parse_url(Config::DOMAIN, PHP_URL_HOST) ?: 'the server';
+			$this->out->addDir('No favourites - star stations at ' . $host, Config::RADIO_DOMAIN . '?go=initial');
+		}
+	}
+
+	private function listRecent() : void {
+		$this->out->prevUrl(Config::RADIO_DOMAIN . '?go=initial');
+		$this->out->currentUrl(Config::RADIO_DOMAIN . 'list?recent=1', 'Recently played');
+		$n = 0;
+		foreach((new Recent($this->radioId->getId()))->list() as $e){
+			$key = sprintf('%04d', $n);
+			if($e['kind'] === 'own'){
+				$item = $this->data->getById(intval($e['id']));
+				if($item === array()) continue; // deleted since
+				$this->out->addStation(
+					intval($e['id']), $item['name'],
+					$this->data->getStationURL(intval($e['id']), $this->radioId->getMac()),
+					OutputPlayStatus::Info, sortKey: $key
+				);
+			}
+			else if($e['kind'] === 'rb' && RadioBrowser::matchStationID($e['id'])){
+				$this->out->addStation($e['id'], $e['name'], $e['url'], OutputPlayStatus::Info, sortKey: $key);
+			}
+			else continue;
+			$n++;
+		}
+		if($n === 0){
+			$this->out->addDir('Nothing played yet', Config::RADIO_DOMAIN . '?go=initial');
+		}
 	}
 
 	/**

@@ -477,6 +477,11 @@ class RadioBrowser {
 			logo: $station["favicon"]
 		);
 
+		if($play){ // fork: remember for "Recently played" (the radio asks once without, once with &play)
+			(new Recent($this->radioId->getId()))->add('rb', self::stationIDfromUUID($station["stationuuid"]),
+				$station["name"], $station["url"], $station["favicon"] ?? '');
+		}
+
 		// send the click to server to maintain "station clicks"
 		// 	https://at1.api.radio-browser.info/#Count_station_click
 		$this->run_request("url/" . $uuid, cache: false);

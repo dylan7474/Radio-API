@@ -116,6 +116,21 @@ class Data {
 	}
 
 	/**
+	 * fork: a save that does not know the "fav" star (the classic /gui/) keeps it
+	 */
+	private static function keepFlags(array $list, array $old) : array {
+		$bySid = array();
+		foreach($old as $o){ if(isset($o['sid'])) $bySid[$o['sid']] = $o; }
+		foreach($list as &$it){
+			if(!array_key_exists('fav', $it)){
+				$it['fav'] = !empty($bySid[$it['sid']]['fav']);
+			}
+		}
+		unset($it);
+		return $list;
+	}
+
+	/**
 	 * fork: give every item a stable id "sid" (0 - 998), which the radio uses for presets.
 	 * 	- items that already have a valid, unused sid keep it
 	 * 	- items without one take the sid of the same item in $old (same url, else same name),
@@ -288,7 +303,7 @@ class Data {
 		if(!$this->preloaded){
 			$this->preloadAll();
 		}
-		$this->radio = self::ensureSids($radios, $this->radio);
+		$this->radio = self::keepFlags(self::ensureSids($radios, $this->radio), $this->radio);
 		file_put_contents( __DIR__ . '/../data/radios_'. $this->id .'.json', json_encode($this->radio, JSON_PRETTY_PRINT), LOCK_EX);
 		$this->constructTable(); // update redis
 	}

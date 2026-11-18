@@ -147,6 +147,7 @@ switch($action){
 				'logo' => $logo === 'invalid' ? '' : $logo,
 				'desc' => trim(str($r['desc'] ?? '')) === '' ? '' : Inner::filterName(trim(str($r['desc']))),
 				'proxy' => !empty($r['proxy']),
+				'fav' => !empty($r['fav']),
 				'type' => str($r['type'] ?? '') === 'nc' ? 'nc' : 'radio',
 				'category' => cleanCategory($r['category'] ?? '')
 			) + keepSid($r);
@@ -189,6 +190,25 @@ switch($action){
 
 	case 'countries':
 		reply(array('ok' => true, 'countries' => (new RadioBrowser($id))->countries()));
+
+	case 'recent':
+		$data = new Data($id);
+		$out = array();
+		foreach((new Recent($id))->list() as $e){
+			if($e['kind'] === 'own'){
+				$item = $data->getById(intval($e['id']));
+				if($item === array()) continue; // deleted since
+				$e['name'] = $item['name']; $e['url'] = $item['url']; $e['logo'] = $item['logo'] ?? '';
+				$e['sid'] = $item['sid'] ?? null;
+			}
+			$out[] = $e;
+		}
+		reply(array('ok' => true, 'results' => $out));
+
+	case 'recent_clear':
+		if(!$isPost) reply(array('ok' => false), 405);
+		(new Recent($id))->clear();
+		reply(array('ok' => true));
 
 	case 'last':
 		$last = array_values((new RadioBrowser($id))->lastStations());

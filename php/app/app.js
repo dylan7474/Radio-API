@@ -172,6 +172,7 @@ async function load() {
 		try { S.radioCount = ((await (await fetch("api.php?a=who", { credentials: "same-origin" })).json()).radios || []).length; } catch (e) { S.radioCount = 1; }
 	}
 	$("#logout").hidden = S.radioCount < 2;
+	loadRecent();
 	$("#login").hidden = true;
 	$("#app").hidden = false;
 	renderAll();
@@ -179,6 +180,7 @@ async function load() {
 
 function renderAll() {
 	renderStations();
+	if (S.recent) renderRecent();
 	renderPodcasts();
 	updateSavebar();
 }
@@ -195,13 +197,16 @@ $("#save").addEventListener("click", async () => {
 	btn.disabled = true;
 	btn.textContent = "Saving…";
 	try {
+		// store in the order the page shows (top level, then each folder), so the radio's
+		// Favourites and folders list stations in the same order as this page
+		const shown = (list) => groups(list).flatMap(g => g.idx.map(i => list[i]));
 		if (isDirty("radios")) {
-			const d = await api("radios", { body: { items: S.radios } });
+			const d = await api("radios", { body: { items: shown(S.radios) } });
 			S.radios = d.radios;
 			S.saved.radios = JSON.stringify(S.radios);
 		}
 		if (isDirty("podcasts")) {
-			const d = await api("podcasts", { body: { items: S.podcasts } });
+			const d = await api("podcasts", { body: { items: shown(S.podcasts) } });
 			S.podcasts = d.podcasts;
 			S.saved.podcasts = JSON.stringify(S.podcasts);
 		}
@@ -255,7 +260,8 @@ function folderNames(list) {
 function renderStations() {
 	const list = $("#stationList");
 	const filter = $("#filterStations").value.trim().toLowerCase();
-	const savedByUrl = new Set(JSON.parse(S.saved.radios).map(r => r.name + "|" + r.url + "|" + r.category));
+	const sig = r => r.name + "|" + r.url + "|" + r.category + "|" + !!r.fav;
+	const savedByUrl = new Set(JSON.parse(S.saved.radios).map(sig));
 	list.replaceChildren();
 	for (const g of groups(S.radios)) {
 		const rows = g.idx.filter(i => !filter || (S.radios[i].name + " " + S.radios[i].desc).toLowerCase().includes(filter));
@@ -264,7 +270,7 @@ function renderStations() {
 		rows.forEach((i, pos) => {
 			const r = S.radios[i];
 			const key = "r" + i;
-			const changed = !savedByUrl.has(r.name + "|" + r.url + "|" + r.category);
+			const changed = !savedByUrl.has(sig(r));
 			const li = el("li", { class: "item" + (changed ? " changed" : ""), "data-i": i },
 				el("span", { class: "handle", title: "Drag to move", "aria-hidden": "true", text: "⠿" }),
 				logoBox(r.logo, r.name),
@@ -272,6 +278,7 @@ function renderStations() {
 					el("b", { text: r.name }),
 					el("small", { text: r.desc || r.url }),
 					el("div", { class: "tags" },
+						r.fav ? el("span", { class: "tag", text: "★ Favourite" }) : null,
 						r.type === "nc" ? el("span", { class: "tag", text: "Nextcloud files" }) : null,
 						r.proxy ? el("span", { class: "tag", text: "through phobos" }) : null,
 						changed ? el("span", { class: "tag state warn", text: "not saved" }) : null)),
@@ -280,6 +287,9 @@ function renderStations() {
 						class: S.playingKey === key ? "playing" : "", title: "Listen here", "aria-label": "Listen to " + r.name,
 						text: S.playingKey === key ? "■" : "▶", onclick: () => togglePlay(key, r)
 					}),
+					el("button", { class: "star" + (r.fav ? " on" : ""), title: r.fav ? "In Favourites (press to remove)" : "Add to Favourites",
+						"aria-label": (r.fav ? "Remove from Favourites: " : "Add to Favourites: ") + r.name, "aria-pressed": r.fav ? "true" : "false",
+						text: r.fav ? "★" : "☆", onclick: () => { r.fav = !r.fav; renderAll(); } }),
 					el("button", { text: "Edit", onclick: () => editStation(i) }),
 					el("button", { title: "Move up", "aria-label": "Move up", text: "↑", disabled: pos === 0 && !filter ? true : null, onclick: () => moveWithin("radios", g.idx, i, -1) }),
 					el("button", { title: "Move down", "aria-label": "Move down", text: "↓", disabled: pos === rows.length - 1 && !filter ? true : null, onclick: () => moveWithin("radios", g.idx, i, 1) }),
@@ -363,8 +373,10 @@ function editStation(i, preset = null) {
 		if (dlg.returnValue !== "ok") return;
 		const item = {
 			name: f.name.value.trim(), url: f.url.value.trim(), logo: f.logo.value.trim(), desc: f.desc.value.trim(),
-			proxy: f.proxy.checked, type: f.nc.checked ? "nc" : "radio", category: f.category.value.trim()
+			proxy: f.proxy.checked, type: f.nc.checked ? "nc" : "radio", category: f.category.value.trim(),
+			fav: i === null ? !!(preset && preset.fav) : !!S.radios[i].fav
 		};
+		if (i !== null && S.radios[i].sid !== undefined) item.sid = S.radios[i].sid;
 		if (i === null) S.radios.push(item); else S.radios[i] = item;
 		renderAll();
 	};
@@ -561,13 +573,57 @@ function renderResults(list, results, prefix) {
 	}));
 }
 
-$("#lastBox").addEventListener("toggle", async (e) => {
-	if (!e.target.open) return;
+
+/* ---------- recently played (everything the radio played) ---------- */
+
+async function loadRecent() {
 	try {
-		const d = await api("last");
-		if (!d.results.length) $("#lastList").replaceChildren(el("li", { class: "empty", text: "Nothing yet. Stations you play under Radio-Browser on the radio show up here." }));
-		else { S.last = d.results; renderResults($("#lastList"), d.results, "l"); }
-	} catch (err) { /* shown elsewhere */ }
+		const d = await api("recent");
+		S.recent = d.results;
+		renderRecent();
+	} catch (err) { /* login handled in api() */ }
+}
+
+function renderRecent() {
+	const box = $("#recentBox");
+	box.hidden = !S.recent || !S.recent.length;
+	if (box.hidden) return;
+	if (!S.recentOpened) { box.open = true; S.recentOpened = true; }
+	$("#recentList").replaceChildren(...S.recent.map((e, n) => {
+		const key = "h" + n;
+		const own = e.kind === "own" ? S.radios.find(r => r.sid === e.sid && e.sid !== null && e.sid !== undefined) : null;
+		const listed = own || S.radios.find(r => r.url === e.url);
+		const when = new Date(e.time * 1000);
+		const ago = Math.round((Date.now() - when) / 60000);
+		const agoText = ago < 1 ? "just now" : ago < 60 ? ago + " min ago" : ago < 1440 ? Math.round(ago / 60) + " h ago" : when.toLocaleDateString();
+		let action;
+		if (listed) {
+			action = el("button", { class: "star" + (listed.fav ? " on" : ""), "aria-pressed": listed.fav ? "true" : "false",
+				title: listed.fav ? "In Favourites" : "Add to Favourites",
+				text: listed.fav ? "★ Favourite" : "☆ Favourite", onclick: () => { listed.fav = !listed.fav; renderAll(); renderRecent(); } });
+		} else {
+			action = el("button", { class: "primary", text: "+ Add", title: "Add to your stations", onclick: () => {
+				S.radios.push({ name: e.name, url: e.url, logo: e.logo || "", desc: "", proxy: false, type: "radio", category: "", fav: false });
+				renderAll(); renderRecent();
+				toast(`Added "${e.name}". Press Save to send it to the radio.`);
+			} });
+		}
+		return el("li", { class: "item" },
+			logoBox(e.logo, e.name),
+			el("div", { class: "info" },
+				el("b", { text: e.name }),
+				el("small", { text: agoText + (e.kind === "rb" ? " · from Radio-Browser" : listed ? " · in your stations" : "") })),
+			el("div", { class: "acts" },
+				el("button", { "aria-label": "Listen to " + e.name, title: "Listen here", text: S.playingKey === key ? "■" : "▶",
+					class: S.playingKey === key ? "playing" : "", onclick: () => togglePlay(key, e) }),
+				action));
+	}));
+}
+
+$("#recentClear").addEventListener("click", async (ev) => {
+	ev.preventDefault();
+	if (!(await confirmBox("Clear the radio's Recently played list?", "Clear"))) return;
+	try { await api("recent_clear", { body: {} }); S.recent = []; renderRecent(); toast("Cleared"); } catch (err) { /* */ }
 });
 
 /* ---------- player ---------- */
@@ -589,7 +645,7 @@ function stopPlay() {
 function refreshPlayButtons() {
 	renderStations();
 	if (S.results) renderResults($("#results"), S.results, "s");
-	if (S.last) renderResults($("#lastList"), S.last, "l");
+	if (S.recent) renderRecent();
 }
 
 async function togglePlay(key, item, resolved = false) {
@@ -623,6 +679,8 @@ async function togglePlay(key, item, resolved = false) {
 	}
 }
 audio.addEventListener("error", () => { if (S.playingKey) $("#pNote").textContent = "✗ The stream stopped or cannot be played in a browser"; });
+
+document.addEventListener("visibilitychange", () => { if (!document.hidden && S.loadedOnce) loadRecent(); });
 
 /* ---------- start ---------- */
 
