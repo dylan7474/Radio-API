@@ -263,6 +263,7 @@ class Router {
 					$item['name'],
 					$this->data->getStationURL($id, $this->radioId->getMac()),
 					OutputPlayStatus::Info,
+					logo: $item['logo'] ?? '', // fork: logos in lists too, not only when playing
 					sortKey: self::orderKey($item)
 				);
 			}
@@ -313,6 +314,7 @@ class Router {
 				$id, $item['name'],
 				$this->data->getStationURL($id, $this->radioId->getMac()),
 				OutputPlayStatus::Info,
+				logo: $item['logo'] ?? '',
 				sortKey: self::orderKey($item)
 			);
 		}
@@ -334,12 +336,12 @@ class Router {
 				$this->out->addStation(
 					intval($e['id']), $item['name'],
 					$this->data->getStationURL(intval($e['id']), $this->radioId->getMac()),
-					OutputPlayStatus::Info, sortKey: $key
+					OutputPlayStatus::Info, logo: $item['logo'] ?? '', sortKey: $key
 				);
 			}
 			else if($e['kind'] === 'rb' && RadioBrowser::matchStationID($e['id'])){
 				$url = Relay::needed($e['url']) ? Relay::rbUrl($e['id'], $this->radioId->getMac()) : $e['url'];
-				$this->out->addStation($e['id'], $e['name'], $url, OutputPlayStatus::Info, sortKey: $key);
+				$this->out->addStation($e['id'], $e['name'], $url, OutputPlayStatus::Info, logo: $e['logo'] ?? '', sortKey: $key);
 			}
 			else continue;
 			$n++;
