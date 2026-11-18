@@ -327,11 +327,19 @@ class Router {
 				Config::RADIO_DOMAIN . 'music.php?id=' . Music::idFor($rel) . '&mac=' . $mac,
 				OutputPlayStatus::Info, logo: Config::RADIO_DOMAIN . 'music.php?art=' . Music::idFor($rel), sortKey: '0000');
 		}
+		// shuffle: a folder with more than one track under it (album, artist), or the whole library
+		$under = $rel === '' ? -1 : count(Music::tracksUnder($rel));
+		if($rel === '' || $under > 1){
+			$label = $rel === '' ? 'Shuffle all music' : 'Shuffle - ' . $under . ' tracks';
+			$this->out->addStation(Music::shuffleIdFor($rel), $label,
+				Config::RADIO_DOMAIN . 'music.php?id=' . Music::shuffleIdFor($rel) . '&mac=' . $mac,
+				OutputPlayStatus::Info, logo: Config::RADIO_DOMAIN . 'music.php?art=' . Music::idFor($rel), sortKey: '0001');
+		}
 		foreach($e['tracks'] as $n => $t){
 			$this->out->addStation(Music::idFor($t), Music::title($t),
 				Config::RADIO_DOMAIN . 'music.php?id=' . Music::idFor($t) . '&mac=' . $mac,
 				OutputPlayStatus::Info, logo: Config::RADIO_DOMAIN . 'music.php?art=' . Music::idFor($t),
-				sortKey: sprintf('%04d', $n + 1));
+				sortKey: sprintf('%04d', $n + 2));
 		}
 		if(count($e['dirs']) === 0 && count($e['tracks']) === 0){
 			$this->out->addDir('Empty folder', Config::RADIO_DOMAIN . 'music');
@@ -348,16 +356,18 @@ class Router {
 			return;
 		}
 		$isDir = is_dir(Music::abs($rel));
+		$shuffle = Music::isShuffle($id);
 		$parent = dirname($rel) === '.' ? '' : dirname($rel);
 		$this->out->prevUrl(Config::RADIO_DOMAIN . 'music' . ($isDir ? '?id=' . $id : ($parent === '' ? '' : '?id=' . Music::idFor($parent))));
-		$name = $isDir ? Music::albumOf($rel) : Music::title($rel);
+		$name = $isDir ? ($rel === '' ? 'All music' : Music::albumOf($rel)) : Music::title($rel);
+		if($shuffle) $name = 'Shuffle: ' . $name;
 		$url = Config::RADIO_DOMAIN . 'music.php?id=' . $id . '&mac=' . $this->radioId->getMac();
-		$art = Config::RADIO_DOMAIN . 'music.php?art=' . $id;
+		$art = Config::RADIO_DOMAIN . 'music.php?art=' . Music::idFor($rel);
 		$this->out->addStation($id, $name, $url,
 			status: $play ? OutputPlayStatus::Play : OutputPlayStatus::Full,
-			desc: $isDir ? count(Music::tracksUnder($rel)) . ' tracks' : Music::albumOf($rel), logo: $art);
+			desc: $isDir ? ($rel === '' ? 'Your whole music library' : count(Music::tracksUnder($rel)) . ' tracks') : Music::albumOf($rel), logo: $art);
 		if($play){
-			(new Recent($this->radioId->getId()))->add('mu', $id, $isDir ? 'Album: ' . $name : $name . ' - ' . Music::albumOf($rel), $url, $art);
+			(new Recent($this->radioId->getId()))->add('mu', $id, $isDir ? ($shuffle ? $name : 'Album: ' . $name) : $name . ' - ' . Music::albumOf($rel), $url, $art);
 		}
 	}
 

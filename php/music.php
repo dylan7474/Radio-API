@@ -42,7 +42,10 @@ if( is_null($abs) ){
 	http_response_code(404);
 	die('Not in the music library');
 }
-$tracks = is_dir($abs) ? Music::tracksUnder($rel) : array($rel);
+$tracks = is_dir($abs) ? Music::tracksUnder($rel, $rel === '' ? -1 : 0) : array($rel);
+if( Music::isShuffle($_GET['id']) ){
+	shuffle($tracks);
+}
 if( empty($tracks) ){
 	http_response_code(404);
 	die('No tracks here');
@@ -53,6 +56,7 @@ ignore_user_abort(true); // keep running after the radio leaves, to stop ffmpeg 
 while( ob_get_level() > 0 ){ ob_end_flush(); }
 
 $album = Music::albumOf($rel);
+$shuffling = Music::isShuffle($_GET['id']);
 $metaint = 16000;
 $icy = ($_SERVER['HTTP_ICY_METADATA'] ?? '') === '1';
 header('Content-Type: audio/mpeg');
@@ -74,7 +78,8 @@ function metaBlock(string $title) : string {
 $untilMeta = $metaint;
 $gone = false;
 foreach( $tracks as $t ){
-	$metaBlock = metaBlock(Music::title($t) . ($album !== '' ? ' - ' . $album : ''));
+	$trackAlbum = $shuffling ? Music::albumOf($t) : $album;
+	$metaBlock = metaBlock(Music::title($t) . ($trackAlbum !== '' ? ' - ' . $trackAlbum : ''));
 	// each track to MP3 (no ID3 tag / Xing header in the middle of the stream)
 	$cmd = array('ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin', '-i', Music::abs($t),
 		'-map', '0:a:0', '-vn', '-ac', '2', '-ar', '44100', '-c:a', 'libmp3lame', '-b:a', '192k',

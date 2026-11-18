@@ -18,7 +18,7 @@ defined('HAMARadio') or die('Invalid Endpoint');
 class Music {
 
 	public const ROOT = '/music';
-	public const ID_PREG = '/^mu[0-9a-f]{30}$/';
+	public const ID_PREG = '/^m[us][0-9a-f]{30}$/'; // mu = a folder/track, ms = shuffle that folder
 	private const AUDIO = array('mp3', 'flac', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'wav', 'wma', 'aif', 'aiff');
 
 	public static function available() : bool {
@@ -27,6 +27,14 @@ class Music {
 
 	public static function idFor(string $rel) : string {
 		return 'mu' . substr(md5($rel), 0, 30);
+	}
+
+	public static function shuffleIdFor(string $rel) : string {
+		return 'ms' . substr(md5($rel), 0, 30);
+	}
+
+	public static function isShuffle(string $id) : bool {
+		return str_starts_with($id, 'ms');
 	}
 
 	public static function isAudio(string $name) : bool {
@@ -87,6 +95,7 @@ class Music {
 		if(!preg_match(self::ID_PREG, $id)){
 			return null;
 		}
+		$id = 'mu' . substr($id, 2); // a shuffle id names the same folder
 		$c = new Cache('music-index');
 		if($c->arrayKeyExists('index', $id)){
 			$rel = $c->arrayKeyGet('index', $id);
