@@ -20,4 +20,9 @@ for i in $(seq 1 20); do s=$(docker inspect -f '{{.State.Health.Status}}' radio_
 code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1/gui/)
 echo "was: $old  now: radio-api-dj:$tag  health: $s  gui: $code"
 [ "$s" = healthy ] && [ "$code" = 200 ] || { echo "FAILED - rolling back to $old"; sed -i "s|image: .*|image: $old|" compose.yaml; docker compose up -d; exit 1; }
+# phobos disk is tight: keep only the running image and the one before it (for rollback)
+for img in $(docker images radio-api-dj --format '{{.Repository}}:{{.Tag}}'); do
+  [ "$img" = "radio-api-dj:$tag" ] || [ "$img" = "$old" ] || docker rmi -f "$img" >/dev/null
+done
+docker image prune -f >/dev/null
 REMOTE
