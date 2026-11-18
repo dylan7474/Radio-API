@@ -10,7 +10,7 @@ set -euo pipefail
 src=~/src/Radio-API
 [ -d "$src/.git" ] || git clone -q https://github.com/dylan7474/Radio-API.git "$src"
 cd "$src" && git fetch -q origin && git checkout -q "$BRANCH" && git reset -q --hard "origin/$BRANCH"
-tag="$(head -n1 VERSION)-dj-$(git rev-parse --short HEAD)"
+tag="$(sed -n 2p VERSION)-dj-$(git rev-parse --short HEAD)"
 docker build -q -f utils/Dockerfile -t "radio-api-dj:$tag" . >/dev/null
 cd ~/radio-api
 old=$(grep -oP 'image: \K\S+' compose.yaml)
