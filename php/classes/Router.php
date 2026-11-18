@@ -276,7 +276,7 @@ class Router {
 		$folders = is_null($cat) && !is_null($tid) ? array_filter($this->data->getCategories($tid)) : array();
 		if(count($items) === 0 && count($folders) === 0){
 			$host = parse_url(Config::DOMAIN, PHP_URL_HOST) ?: 'the server';
-			$this->out->addDir('Empty - add at ' . $host . '/app', Config::RADIO_DOMAIN . '?go=initial');
+			$this->out->addDir('Empty - add on the web page ' . $host, Config::RADIO_DOMAIN . '?go=initial');
 		}
 	}
 

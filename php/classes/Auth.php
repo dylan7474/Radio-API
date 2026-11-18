@@ -130,7 +130,7 @@ class Auth {
 		else{
 			// no auth data, so fail			
 			if($redirectGui && !isset($_GET['yesStay'])){ // redirect user to gui
-				header('Location:'. Config::DOMAIN .'gui/view.php?redirFromIndex');
+				header('Location:'. Config::DOMAIN .'app/'); // fork: browsers go to the new page
 				http_response_code(303);
 				die();
 			}
