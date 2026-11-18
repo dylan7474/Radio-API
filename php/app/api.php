@@ -38,6 +38,32 @@ function cleanCategory($v) : string {
 	return $v === '' ? '' : Inner::filterCategory($v);
 }
 
+// names the user gave the radios on the page (data/radio_names.json: {"<id>": "Kitchen"})
+function radioNames() : array {
+	$f = __DIR__ . '/../data/radio_names.json';
+	$n = is_file($f) ? json_decode(file_get_contents($f), true) : null;
+	return is_array($n) ? $n : array();
+}
+
+// every radio that has connected: [{id, code, name, stations}]
+function knownRadios() : array {
+	$table = Id::getTableData();
+	$names = radioNames();
+	$out = array();
+	foreach($table['ids'] ?? array() as $rid => $v){
+		if(!is_array($v) || empty($v[1])) continue;
+		$file = __DIR__ . '/../data/radios_' . intval($rid) . '.json';
+		$list = is_file($file) ? json_decode(file_get_contents($file), true) : array();
+		$out[] = array(
+			'id' => intval($rid),
+			'code' => $v[1],
+			'name' => $names[strval($rid)] ?? '',
+			'stations' => is_array($list) ? count($list) : 0
+		);
+	}
+	return $out;
+}
+
 // the stable id the radio uses for presets (see Data::ensureSids); only kept if valid
 function keepSid(array $item) : array {
 	return isset($item['sid']) && is_int($item['sid']) && $item['sid'] >= 0 && $item['sid'] <= 998
@@ -55,6 +81,22 @@ if($action === 'login' && $isPost){
 	}
 	reply(array('ok' => $login->isLoggedIn()), $login->isLoggedIn() ? 200 : 403);
 }
+// fork: LAN-only, so no code to type: list the known radios and let the page pick one
+//	(the GUI-Code login above stays as a fallback; access is still limited by CONF_ALLOWED_DOMAIN)
+if($action === 'who'){
+	reply(array('ok' => true, 'radios' => knownRadios()));
+}
+if($action === 'pick' && $isPost){
+	$want = intval(body()['id'] ?? -1);
+	foreach(knownRadios() as $r){
+		if($r['id'] === $want){
+			$login->loginByCode($r['code']);
+			reply(array('ok' => $login->isLoggedIn()), $login->isLoggedIn() ? 200 : 403);
+		}
+	}
+	reply(array('ok' => false, 'error' => 'No such radio'), 404);
+}
+
 if(!$login->isLoggedIn()){
 	reply(array('ok' => false, 'error' => 'login'), 401);
 }
@@ -62,6 +104,15 @@ if(!$login->isLoggedIn()){
 $id = $login->getId();
 
 switch($action){
+
+	case 'rename':
+		if(!$isPost) reply(array('ok' => false), 405);
+		$name = trim(str(body()['name'] ?? ''));
+		$names = radioNames();
+		if($name === '') unset($names[strval($id)]);
+		else $names[strval($id)] = mb_substr(Inner::filterName($name), 0, 60);
+		file_put_contents(__DIR__ . '/../data/radio_names.json', json_encode($names, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX);
+		reply(array('ok' => true, 'name' => $names[strval($id)] ?? ''));
 
 	case 'logout':
 		$login->logout();
@@ -73,6 +124,8 @@ switch($action){
 		reply(array(
 			'ok' => true,
 			'code' => $all['code'],
+			'id' => $id,
+			'name' => radioNames()[strval($id)] ?? '',
 			'version' => Config::VERSION,
 			'radios' => array_values($data->getRadioList()),
 			'podcasts' => array_values($data->getPodcastList()),

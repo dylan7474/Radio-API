@@ -41,7 +41,7 @@ function toast(msg) {
 	toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
 }
 
-async function api(action, { body, params } = {}) {
+async function api(action, { body, params } = {}, retried = false) {
 	const q = new URLSearchParams({ a: action, ...(params || {}) });
 	const res = await fetch("api.php?" + q, {
 		method: body ? "POST" : "GET",
@@ -52,7 +52,9 @@ async function api(action, { body, params } = {}) {
 	let data = {};
 	try { data = await res.json(); } catch (e) { /* not json */ }
 	if (res.status === 401) {
-		showLogin(S.loadedOnce ? "Your login timed out. Type the code again; nothing you changed is lost." : "");
+		// the login timed out (or phobos restarted): pick the same radio again, quietly, and retry once
+		if (!retried && S.radioId !== undefined && await pickRadio(S.radioId)) return api(action, { body, params }, true);
+		showLogin(S.loadedOnce ? "Choose the radio again; nothing you changed is lost." : "");
 		throw new Error("login");
 	}
 	if (!res.ok || data.ok === false) throw new Error(data.error || ("Error " + res.status));
@@ -72,13 +74,42 @@ function logoBox(url, name) {
 
 const isDirty = (kind) => JSON.stringify(S[kind]) !== S.saved[kind];
 
-/* ---------- login ---------- */
+/* ---------- choosing the radio (no code: the page is LAN-only) ---------- */
 
-function showLogin(msg = "") {
+const radioLabel = (r) => r.name || ("Radio " + r.id);
+
+async function pickRadio(id) {
+	try {
+		const res = await fetch("api.php?a=pick", { method: "POST", credentials: "same-origin",
+			headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+		return res.ok;
+	} catch (e) { return false; }
+}
+
+async function choose(r) {
+	if (!(await pickRadio(r.id))) { $("#pickMsg").textContent = "✗ Could not open that radio"; return; }
+	S.radioId = r.id;
+	$("#login").hidden = true;
+	if (S.loadedOnce) $("#app").hidden = false; else await load();
+}
+
+// one radio: go straight in; several: show the list
+async function showLogin(msg = "") {
+	$("#pickMsg").textContent = msg;
+	let radios = [];
+	try {
+		const res = await fetch("api.php?a=who", { credentials: "same-origin" });
+		radios = (await res.json()).radios || [];
+	} catch (e) { $("#pickMsg").textContent = "✗ phobos did not answer"; }
+	S.radioCount = radios.length;
+	if (radios.length === 1 && !msg) return choose(radios[0]);
 	$("#app").hidden = !S.loadedOnce;
 	$("#login").hidden = false;
-	$("#loginMsg").textContent = msg;
-	$("#loginCode").focus();
+	$("#pickList").replaceChildren(...radios.map(r => el("li", {},
+		el("button", { onclick: () => choose(r) },
+			el("b", { text: radioLabel(r) }),
+			el("small", { text: `${r.stations} station${r.stations === 1 ? "" : "s"} · code ${r.code}` })))));
+	if (!radios.length) $("#pickMsg").textContent = "No radio has connected yet. Turn the radio on and open Internet Radio, then reload this page.";
 }
 
 $("#loginForm").addEventListener("submit", async (e) => {
@@ -86,23 +117,44 @@ $("#loginForm").addEventListener("submit", async (e) => {
 	const code = $("#loginCode").value.trim();
 	$("#loginMsg").textContent = "Checking…";
 	try {
-		await api("login", { body: { code } });
+		await api("login", { body: { code } }, true);
 		$("#login").hidden = true;
 		$("#loginCode").value = "";
-		if (S.loadedOnce) { $("#app").hidden = false; toast("Logged in again"); }
-		else await load();
+		if (S.loadedOnce) $("#app").hidden = false; else await load();
 	} catch (err) {
-		$("#loginMsg").textContent = "✗ That code was not accepted. It starts with Z and has 5 characters, e.g. Z6AfV (capitals matter).";
+		$("#loginMsg").textContent = "✗ That code was not accepted. It starts with Z and has 5 characters (capitals matter).";
 	}
 });
 
 $("#logout").addEventListener("click", async () => {
 	if (isDirty("radios") || isDirty("podcasts")) {
-		if (!(await confirmBox("You have unsaved changes. Log out anyway and lose them?", "Log out"))) return;
+		if (!(await confirmBox("You have unsaved changes. Switch radio anyway and lose them?", "Switch"))) return;
 	}
-	try { await api("logout"); } catch (e) { /* ignore */ }
-	location.reload();
+	try { await api("logout", {}, true); } catch (e) { /* ignore */ }
+	S.loadedOnce = false; S.radioId = undefined;
+	$("#app").hidden = true;
+	showLogin(" ");
 });
+
+$("#radioName").addEventListener("click", () => {
+	const dlg = $("#renameDlg"), f = $("#renameForm");
+	f.name.value = S.radioName || "";
+	$("#renameCode").textContent = S.radioCode || "";
+	dlg.returnValue = "";
+	dlg.showModal();
+	dlg.onclose = async () => {
+		if (dlg.returnValue !== "ok") return;
+		try {
+			const d = await api("rename", { body: { name: f.name.value } });
+			S.radioName = d.name;
+			showRadioName();
+		} catch (err) { if (err.message !== "login") toast("✗ " + err.message); }
+	};
+});
+
+function showRadioName() {
+	$("#radioName b").textContent = S.radioName || ("Radio " + S.radioId);
+}
 
 /* ---------- loading + saving ---------- */
 
@@ -114,7 +166,12 @@ async function load() {
 	S.saved.podcasts = JSON.stringify(S.podcasts);
 	S.moved = false;
 	S.loadedOnce = true;
-	$("#radioCode").textContent = d.code;
+	S.radioId = d.id; S.radioCode = d.code; S.radioName = d.name;
+	showRadioName();
+	if (S.radioCount === undefined) {
+		try { S.radioCount = ((await (await fetch("api.php?a=who", { credentials: "same-origin" })).json()).radios || []).length; } catch (e) { S.radioCount = 1; }
+	}
+	$("#logout").hidden = S.radioCount < 2;
 	$("#login").hidden = true;
 	$("#app").hidden = false;
 	renderAll();

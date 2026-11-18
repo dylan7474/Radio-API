@@ -23,19 +23,25 @@ $v = htmlspecialchars(Config::VERSION);
 <body>
 
 <section id="login" class="login" hidden>
-	<form id="loginForm" class="card">
-		<h1>Radio stations</h1>
-		<p>On the radio, open <b>Internet Radio</b>. The last line shows <b>GUI-Code: Z…</b>. Type that code here.</p>
-		<label>Code <input id="loginCode" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Zxxxx" maxlength="5" required></label>
-		<button class="primary" type="submit">Log in</button>
-		<p id="loginMsg" class="msg" role="alert"></p>
-	</form>
+	<div class="card">
+		<h1>Which radio?</h1>
+		<ol id="pickList" class="picklist"></ol>
+		<p id="pickMsg" class="msg" role="alert"></p>
+		<details>
+			<summary>Use the radio's GUI-Code instead</summary>
+			<form id="loginForm" class="codeform">
+				<input id="loginCode" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Zxxxx" maxlength="5" aria-label="GUI-Code" required>
+				<button class="primary" type="submit">Open</button>
+			</form>
+			<p id="loginMsg" class="msg"></p>
+		</details>
+	</div>
 </section>
 
 <section id="app" hidden>
 	<header class="top">
 		<h1>Radio stations</h1>
-		<span class="code" title="This radio's GUI-Code">Radio <b id="radioCode"></b></span>
+		<button id="radioName" class="code quiet" title="Rename this radio">📻 <b></b> ✎</button>
 		<nav class="tabs" role="tablist">
 			<button role="tab" data-tab="stations" aria-selected="true">Stations</button>
 			<button role="tab" data-tab="find">Find stations</button>
@@ -43,7 +49,7 @@ $v = htmlspecialchars(Config::VERSION);
 		</nav>
 		<span class="spacer"></span>
 		<a class="quiet" href="../gui/" title="The original page: merging radios, import and export">Classic page</a>
-		<button id="logout" class="quiet">Log out</button>
+		<button id="logout" class="quiet" hidden>Switch radio</button>
 	</header>
 
 	<main>
@@ -150,6 +156,18 @@ $v = htmlspecialchars(Config::VERSION);
 			<label class="check"><input type="checkbox" name="finalurl"> Follow redirects before giving the episode to the radio</label>
 			<label class="check"><input type="checkbox" name="proxy"> Play through phobos</label>
 		</fieldset>
+		<div class="dlgbtns">
+			<button type="button" class="quiet cancelBtn">Cancel</button>
+			<button value="ok" class="primary">OK</button>
+		</div>
+	</form>
+</dialog>
+
+<dialog id="renameDlg">
+	<form method="dialog" id="renameForm" class="dlg">
+		<h2>Name this radio</h2>
+		<label>Name <input name="name" maxlength="60" placeholder="e.g. Kitchen"></label>
+		<p class="hint">Only used on this page, to tell radios apart. Code <b id="renameCode"></b>.</p>
 		<div class="dlgbtns">
 			<button type="button" class="quiet cancelBtn">Cancel</button>
 			<button value="ok" class="primary">OK</button>

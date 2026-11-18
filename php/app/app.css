@@ -116,3 +116,11 @@ dialog::backdrop { background: rgba(0,0,0,.45); }
 }
 
 .listhead { margin: 1.2rem 0 .5rem; font-size: 1rem; }
+
+.picklist { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.picklist button { width: 100%; text-align: left; display: grid; gap: .1rem; padding: .7rem .9rem; }
+.picklist button b { font-size: 1.05rem; }
+.picklist button small { color: var(--muted); }
+.codeform { display: flex; gap: .5rem; margin-top: .5rem; }
+.codeform input { flex: 1; letter-spacing: .1em; }
+#radioName { border: none; padding: .3rem .5rem; }
