@@ -73,7 +73,8 @@ function logoBox(url, name) {
 }
 
 // HLS playlists (the BBC's) can't be played by the radio itself: convert them on phobos
-const needsRelay = (url) => /\.m3u8(\?|$)/i.test(url || "");
+// (the same rules as classes/Relay.php: HLS playlists, and Sleep Radio receivers, which send WAV)
+const needsRelay = (url) => /\.m3u8(\?|$)/i.test(url || "") || /^https?:\/\/[^/]+\/audio\?(.*&)?(band|freq)=/i.test(url || "");
 
 const isDirty = (kind) => JSON.stringify(S[kind]) !== S.saved[kind];
 

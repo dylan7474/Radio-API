@@ -116,7 +116,8 @@ class Data {
 	}
 
 	/**
-	 * fork: a save that does not know the "fav" star (the classic /gui/) keeps it
+	 * fork: a save that does not know the "fav" star or "relay" (the classic /gui/) keeps them,
+	 * 	and new addresses the radios can't play are converted (Relay::needed)
 	 */
 	private static function keepFlags(array $list, array $old) : array {
 		$bySid = array();
@@ -126,6 +127,11 @@ class Data {
 				if(!array_key_exists($flag, $it)){
 					$it[$flag] = !empty($bySid[$it['sid']][$flag]);
 				}
+			}
+			// new or changed address the radios can't play: convert it (an untick later stays)
+			$before = $bySid[$it['sid']]['url'] ?? null;
+			if($before !== ($it['url'] ?? null) && ($it['type'] ?? 'radio') !== 'nc' && Relay::needed($it['url'] ?? '')){
+				$it['relay'] = true;
 			}
 		}
 		unset($it);

@@ -20,7 +20,21 @@ $radioId = $auth->auth();
 $data = new Data($radioId->getId());
 
 $id = $_GET['id'] ?? '';
-$station = is_string($id) && preg_match('/^\d{4}$/', $id) ? $data->getById((int)$id) : array();
+$rb = $_GET['rb'] ?? '';
+if( is_string($rb) && RadioBrowser::matchStationID($rb) ){
+	// a Radio-Browser station: only one the rules say the radio can't play (not an open relay)
+	$rbs = (new RadioBrowser($radioId))->stationById($rb);
+	$url = '';
+	if( !is_null($rbs) ){
+		foreach( array($rbs['url'] ?? '', $rbs['url_resolved'] ?? '') as $u ){
+			if( Relay::needed($u, $rbs) ){ $url = $u; break; }
+		}
+	}
+	$station = $url === '' ? array() : array('name' => $rbs['name'] ?? 'Radio', 'url' => $url, 'relay' => true);
+}
+else {
+	$station = is_string($id) && preg_match('/^\d{4}$/', $id) ? $data->getById((int)$id) : array();
+}
 $url = $station['url'] ?? '';
 
 if( empty($station['relay']) || !filter_var($url, FILTER_VALIDATE_URL) || !preg_match('#^https?://#i', $url) ){

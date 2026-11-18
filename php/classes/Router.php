@@ -338,7 +338,8 @@ class Router {
 				);
 			}
 			else if($e['kind'] === 'rb' && RadioBrowser::matchStationID($e['id'])){
-				$this->out->addStation($e['id'], $e['name'], $e['url'], OutputPlayStatus::Info, sortKey: $key);
+				$url = Relay::needed($e['url']) ? Relay::rbUrl($e['id'], $this->radioId->getMac()) : $e['url'];
+				$this->out->addStation($e['id'], $e['name'], $url, OutputPlayStatus::Info, sortKey: $key);
 			}
 			else continue;
 			$n++;

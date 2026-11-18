@@ -222,7 +222,7 @@ class RadioBrowser {
 					$now = time();
 					foreach($last as $uuid => $item){
 						$out->addStation(
-							self::stationIDfromUUID($uuid), $item["name"], $item["url"],
+							self::stationIDfromUUID($uuid), $item["name"], $this->playUrl(self::stationIDfromUUID($uuid), $item),
 							status: OutputPlayStatus::Info,
 							sortKey: $now-$item["time"]
 						);
@@ -260,7 +260,7 @@ class RadioBrowser {
 					foreach($list as $i => $item){
 						$out->addStation(
 							self::stationIDfromUUID($item["stationuuid"]), $item["name"],
-							$item["url"], status: OutputPlayStatus::Info, sortKey: $i+1
+							$this->playUrl(self::stationIDfromUUID($item["stationuuid"]), $item), status: OutputPlayStatus::Info, sortKey: $i+1
 						);
 					}
 					break;
@@ -329,7 +329,7 @@ class RadioBrowser {
 			foreach($list as $i => $item){
 				$out->addStation(
 					self::stationIDfromUUID($item["stationuuid"]),
-					$item["name"], $item["url"],
+					$item["name"], $this->playUrl(self::stationIDfromUUID($item["stationuuid"]), $item),
 					status: OutputPlayStatus::Info,
 					sortKey: $i+1
 				);
@@ -447,6 +447,28 @@ class RadioBrowser {
 		return array_values($out);
 	}
 
+	/**
+	 * fork: the address the radio should play: the station's own, or relay.php for ones it can't play
+	 */
+	private function playUrl(string $stationId, array $item) : string {
+		$url = $item["url"] ?? "";
+		return Relay::needed($url, $item) || Relay::needed($item["url_resolved"] ?? "")
+			? Relay::rbUrl($stationId, $this->radioId->getMac()) : $url;
+	}
+
+	/**
+	 * fork: one station's Radio-Browser record by our 32-character id (for relay.php), or null
+	 */
+	public function stationById(string $id) : ?array {
+		$uuid = self::uuidFromStationID($id);
+		if($uuid === false){
+			return null;
+		}
+		$this->before_request();
+		$stations = $this->run_request("stations/byuuid", array("uuids" => $uuid));
+		return is_array($stations) && !empty($stations[0]) ? $stations[0] : null;
+	}
+
 	public function handleStationPlay(Output $out, string $id, bool $play) : void {
 		$this->before_request($out);
 
@@ -471,7 +493,7 @@ class RadioBrowser {
 		$out->addStation(
 			self::stationIDfromUUID($station["stationuuid"]),
 			$station["name"],
-			$station["url"],
+			$this->playUrl(self::stationIDfromUUID($station["stationuuid"]), $station),
 			status: $play ? OutputPlayStatus::Play : OutputPlayStatus::Full,
 			desc: $station["tags"] . " - " . $station["country"],
 			logo: $station["favicon"]
