@@ -81,7 +81,11 @@ foreach( $tracks as $t ){
 	$trackAlbum = $shuffling ? Music::albumOf($t) : $album;
 	$metaBlock = metaBlock(Music::title($t) . ($trackAlbum !== '' ? ' - ' . $trackAlbum : ''));
 	// each track to MP3 (no ID3 tag / Xing header in the middle of the stream)
-	$cmd = array('ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin', '-i', Music::abs($t),
+	// at playing speed (FLAC converts ~50x faster): a radio that left is noticed within seconds,
+	// and nothing races ahead through an album or the shuffled library. The first track gets a
+	// 10 s head start so the radio starts quickly; later ones only need to keep up.
+	$cmd = array('ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin',
+		'-readrate', '1', '-readrate_initial_burst', $t === $tracks[0] ? '10' : '2', '-i', Music::abs($t),
 		'-map', '0:a:0', '-vn', '-ac', '2', '-ar', '44100', '-c:a', 'libmp3lame', '-b:a', '192k',
 		'-id3v2_version', '0', '-write_xing', '0', '-f', 'mp3', 'pipe:1');
 	$proc = proc_open($cmd, array(0 => array('file', '/dev/null', 'r'), 1 => array('pipe', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
