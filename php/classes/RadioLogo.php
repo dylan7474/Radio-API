@@ -39,7 +39,7 @@ class RadioLogo {
 	public function logoUrl(string $logo) : string {
 		// empty or no url
 		if(empty($logo) || substr($logo, 0, 4) != 'http'){
-			return self::BASE_URL . 'default.png';
+			return self::BASE_URL . 'station.png'; // fork: our neutral radio icon, not the KIMB logo
 		}
 		
 		// do not use cache
@@ -88,6 +88,10 @@ class RadioLogo {
 		// mime
 		$finfo = finfo_open(FILEINFO_MIME_TYPE);
 		$mimetype = finfo_file($finfo, $filename);
+		// fork: small SVGs are often not recognised (e.g. the BBC's network logos)
+		if( substr($mimetype, 0, 6) !== 'image/' && preg_match('/<svg[\s>]/i', substr($image, 0, 2000)) ){
+			$mimetype = 'image/svg+xml';
+		}
 
 		// its not a image file
 		if( substr($mimetype, 0, strlen('image/')) !== 'image/'){

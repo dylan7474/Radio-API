@@ -126,8 +126,9 @@ $v = htmlspecialchars(Config::VERSION);
 		</label>
 		<p class="msg testMsg"></p>
 		<label>Logo address (optional)
-			<span class="row"><input name="logo" type="url" placeholder="http://…/logo.png"><img class="logoPreview" alt=""></span>
+			<span class="row"><input name="logo" type="url" placeholder="http://…/logo.png"><button type="button" class="findLogoBtn" title="Look for this station's logo on Radio-Browser">Find</button><img class="logoPreview" alt=""></span>
 		</label>
+		<p class="msg logoMsg"></p>
 		<label>Description (optional) <input name="desc" maxlength="200"></label>
 		<label>Folder on the radio (optional) <input name="category" list="stationFolders" maxlength="100" placeholder="Leave empty for the top level"></label>
 		<datalist id="stationFolders"></datalist>

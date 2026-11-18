@@ -327,6 +327,7 @@ function editStation(i, preset = null) {
 	f.category.value = r.category || ""; f.proxy.checked = !!r.proxy; f.nc.checked = r.type === "nc";
 	f.relay.checked = r.relay !== undefined ? !!r.relay : needsRelay(r.url);
 	$(".testMsg", f).textContent = ""; $(".testMsg", f).className = "msg testMsg";
+	$(".logoMsg", f).textContent = ""; $(".logoMsg", f).className = "msg logoMsg";
 	$(".logoPreview", f).src = /^https?:/i.test(r.logo || "") ? r.logo : "";
 	dlg.returnValue = "";
 	dlg.showModal();
@@ -340,9 +341,32 @@ function editStation(i, preset = null) {
 		if (i !== null && S.radios[i].sid !== undefined) item.sid = S.radios[i].sid;
 		if (i === null) S.radios.push(item); else S.radios[i] = item;
 		renderAll();
+		if (!item.logo) autoLogo(item);
 	};
 }
 $("#addStation").addEventListener("click", () => editStation(null));
+// look up a logo for a station that has none (from Radio-Browser, checked to download)
+async function autoLogo(item) {
+	try {
+		const d = await api("findlogo", { params: { url: item.url, name: item.name } });
+		if (d.ok && !item.logo) { item.logo = d.logo; renderAll(); toast(`Found a logo for "${item.name}"`); }
+	} catch (e) { /* no logo: the radio shows its plain icon */ }
+}
+
+$(".findLogoBtn", $("#stationForm")).addEventListener("click", async () => {
+	const f = $("#stationForm"), m = $(".logoMsg", f);
+	if (!f.url.value.trim() && !f.name.value.trim()) { m.textContent = "Type the name or stream address first"; return; }
+	m.className = "msg logoMsg"; m.textContent = "Looking on Radio-Browser…";
+	try {
+		const d = await api("findlogo", { params: { url: f.url.value.trim(), name: f.name.value.trim() } });
+		if (d.ok) {
+			f.logo.value = d.logo;
+			$(".logoPreview", f).src = d.logo;
+			m.className = "msg logoMsg ok"; m.textContent = "✓ Found one" + (d.note ? " (" + d.note.toLowerCase() + ")" : "") + ". Press OK to keep it.";
+		} else { m.className = "msg logoMsg bad"; m.textContent = "✗ " + d.note; }
+	} catch (err) { if (err.message !== "login") { m.className = "msg logoMsg bad"; m.textContent = "✗ " + err.message; } }
+});
+
 $("#stationForm").logo.addEventListener("input", (e) => {
 	$(".logoPreview", $("#stationForm")).src = /^https?:\/\/.+/i.test(e.target.value) ? e.target.value : "";
 });
@@ -566,8 +590,10 @@ function renderRecent() {
 				text: listed.fav ? "★ Favourite" : "☆ Favourite", onclick: () => { listed.fav = !listed.fav; renderAll(); renderRecent(); } });
 		} else {
 			action = el("button", { class: "primary", text: "+ Add", title: "Add to your stations", onclick: () => {
-				S.radios.push({ name: e.name, url: e.url, logo: e.logo || "", desc: "", proxy: false, relay: needsRelay(e.url), type: "radio", category: "", fav: false });
+				const item = { name: e.name, url: e.url, logo: e.logo || "", desc: "", proxy: false, relay: needsRelay(e.url), type: "radio", category: "", fav: false };
+				S.radios.push(item);
 				renderAll(); renderRecent();
+				if (!item.logo) autoLogo(item);
 				toast(`Added "${e.name}". Press Save to send it to the radio.`);
 			} });
 		}

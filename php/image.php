@@ -30,7 +30,7 @@ if( empty($file) || !is_file( $file ) ){
 	header('Location: http' .
 		( empty($_SERVER['HTTPS']) ? ':' : 's:' ) .
 		substr( Config::RADIO_DOMAIN, strpos( Config::RADIO_DOMAIN, '//') )
-		. 'media/default.png'
+		. 'media/station.png' // fork: our neutral icon
 	);
 	http_response_code(303);
 }

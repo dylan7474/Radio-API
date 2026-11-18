@@ -219,6 +219,9 @@ switch($action){
 	case 'podsearch':
 		reply(podcastSearch(str($_GET['q'] ?? '')));
 
+	case 'findlogo':
+		reply(findLogo(str($_GET['url'] ?? ''), str($_GET['name'] ?? ''), $id));
+
 	case 'probe':
 		reply(probe(str($_GET['url'] ?? '')));
 
@@ -274,6 +277,56 @@ function podcastSearch(string $q) : array {
 	}
 	$cache->arraySet($key, $out, 3600);
 	return array('ok' => true, 'results' => $out);
+}
+
+/**
+ * A logo for a station from Radio-Browser that really downloads as a picture
+ * (PNG/JPEG/GIF/WebP/SVG preferred over .ico, which some radios can't show).
+ */
+function findLogo(string $url, string $name, int $id) : array {
+	if($url === '' && $name === ''){
+		return array('ok' => false, 'note' => 'No address or name');
+	}
+	$candidates = (new RadioBrowser($id))->logoCandidates($url, $name);
+	$ico = null;
+	foreach(array_slice($candidates, 0, 8) as $logo){
+		$type = imageType($logo);
+		if($type === null) continue;
+		if(str_contains($type, 'icon')){ $ico = $ico ?? $logo; continue; }
+		return array('ok' => true, 'logo' => $logo, 'type' => $type);
+	}
+	if(!is_null($ico)){
+		return array('ok' => true, 'logo' => $ico, 'type' => 'icon', 'note' => 'Only a small icon was found');
+	}
+	return array('ok' => false, 'note' => count($candidates) ? 'Logos found, but none could be downloaded' : 'No logo found on Radio-Browser');
+}
+
+// the picture's type if the address really gives a picture (at most 2 MB is read), else null
+function imageType(string $url) : ?string {
+	$buf = '';
+	$ch = curl_init($url);
+	curl_setopt_array($ch, array(
+		CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 4,
+		CURLOPT_CONNECTTIMEOUT => 4, CURLOPT_TIMEOUT => 6,
+		CURLOPT_USERAGENT => 'Radio-API/' . Config::VERSION,
+		CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+		CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+		CURLOPT_WRITEFUNCTION => function($ch, $chunk) use (&$buf) {
+			$buf .= $chunk;
+			return strlen($buf) > 2000000 ? 0 : strlen($chunk);
+		}
+	));
+	curl_exec($ch);
+	$status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+	unset($ch);
+	if($status !== 200 || strlen($buf) < 100){
+		return null;
+	}
+	$type = (new finfo(FILEINFO_MIME_TYPE))->buffer($buf);
+	if(!str_starts_with((string)$type, 'image/') && preg_match('/<svg[\s>]/i', substr($buf, 0, 2000))){
+		$type = 'image/svg+xml'; // small SVGs are often not recognised (e.g. the BBC's network logos)
+	}
+	return is_string($type) && str_starts_with($type, 'image/') ? $type : null;
 }
 
 /**

@@ -457,6 +457,34 @@ class RadioBrowser {
 	}
 
 	/**
+	 * fork: possible logos for a station, best first: Radio-Browser entries with the same
+	 * 	stream address, then ones with the same name (most votes first).
+	 */
+	public function logoCandidates(string $url, string $name) : array {
+		$this->before_request();
+		$found = array();
+		if($url !== ''){
+			$list = $this->run_request("stations/byurl", array("url" => $url));
+			if(is_array($list)) $found = array_merge($found, $list);
+		}
+		$names = array_unique(array_filter(array(trim($name), trim(preg_replace('/\s*\([^)]*\)\s*$/', '', $name)))));
+		foreach($names as $n){
+			$list = $this->run_request("stations/byname/" . rawurlencode($n),
+				array("limit" => 15, "hidebroken" => "true", "order" => "votes", "reverse" => "true"));
+			if(!is_array($list)) continue;
+			// only the same name (a name search also finds e.g. any "Marine ..." station)
+			$plain = fn($x) => strtolower(trim(preg_replace('/\s*\([^)]*\)\s*$/', '', $x)));
+			$found = array_merge($found, array_values(array_filter($list, fn($st) => $plain($st["name"] ?? '') === $plain($n))));
+		}
+		$logos = array();
+		foreach($found as $s){
+			$f = trim($s["favicon"] ?? '');
+			if($f !== '' && preg_match('#^https?://#i', $f) && !in_array($f, $logos, true)) $logos[] = $f;
+		}
+		return $logos;
+	}
+
+	/**
 	 * fork: one station's Radio-Browser record by our 32-character id (for relay.php), or null
 	 */
 	public function stationById(string $id) : ?array {

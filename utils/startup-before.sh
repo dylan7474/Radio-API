@@ -8,6 +8,11 @@ if [ ! -f /php-code/data/radios_1.json ]; then
 	mv /data-dir-default/* /php-code/data/ 
 fi;
 
+# 	fork: our stand-in station logo, always the image's current one (media/ is a volume)
+if [ -f /media-dir-default/station.png ]; then
+	cp -f /media-dir-default/station.png /php-code/media/station.png
+fi;
+
 # 	create default media dir, if does not exist
 if [ ! -f /php-code/media/default.png ]; then 
 	mv /media-dir-default/* /php-code/media/ 
