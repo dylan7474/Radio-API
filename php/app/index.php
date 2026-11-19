@@ -53,6 +53,8 @@ $v = htmlspecialchars(Config::VERSION);
 		<button id="logout" class="quiet" hidden>Switch radio</button>
 	</header>
 
+	<section id="nowBox" class="nowbox" aria-live="polite" aria-label="What the radios are playing" hidden></section>
+
 	<main>
 		<div id="tab-stations" class="tab">
 			<div class="toolbar">

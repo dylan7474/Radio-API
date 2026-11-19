@@ -101,20 +101,24 @@ class OutputJSON extends Output {
 		$this->itemsSortKeys[] = 'ra==' . ($sortKey === "" ? $name : $sortKey);
 	}
 
-	public function addPodcast(int $podcastid, string $name, string $url, int|string $sortKey = "") : void {
+	public function addPodcast(int $podcastid, string $name, string $url, int|string $sortKey = "", string $logo = "") : void {
+		$value = array(
+			'id' => [
+				'frontiersmart',
+				'directory',
+				$podcastid
+			],
+			'title' => $this->cleanText($name, true),
+			'url' => $this->cleanUrl($url)
+		);
+		if($logo !== ''){ // fork: the podcast's picture in the list
+			$value['images'] = array(array('url' => $this->cleanUrl($this->logo->logoUrl($logo)), 'size' => [150, 150], 'type' => 'cover'));
+		}
 		$this->items[] = array(
 			'type' => 'directory',
 			'id' => null,
 			'key' => ['content', 'entries'],
-			'value' => array(
-				'id' => [
-					'frontiersmart',
-					'directory',
-					$podcastid
-				],
-				'title' => $this->cleanText($name, true),
-				'url' => $this->cleanUrl($url)
-			)
+			'value' => $value
 		);
 
 		$this->itemsSortKeys[] = 'pod==' . ($sortKey === "" ? $name : $sortKey);

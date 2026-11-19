@@ -192,7 +192,7 @@ switch($action){
 			'name' => radioNames()[strval($id)] ?? '',
 			'version' => Config::VERSION,
 			'radios' => withHealth(withLocalLogos(array_values($data->getRadioList()))),
-			'podcasts' => array_values($data->getPodcastList()),
+			'podcasts' => withLocalLogos(array_values($data->getPodcastList())),
 			'share' => shareInfo($id),
 			'music' => Music::available(),
 			'checked' => is_file(__DIR__ . '/../data/station_health.json') ? filemtime(__DIR__ . '/../data/station_health.json') : 0,
@@ -239,12 +239,12 @@ switch($action){
 				'proxy' => !empty($p['proxy']),
 				'type' => str($p['type'] ?? '') === 'nc' ? 'nc' : 'rss',
 				'category' => cleanCategory($p['category'] ?? '')
-			) + keepSid($p);
+			) + keepSid($p) + (array_key_exists('logo', $p) ? array('logo' => ($l = cleanUrl($p['logo'])) === 'invalid' ? '' : $l) : array());
 			if(count($out) >= 999) break;
 		}
 		$data = new Data($id);
 		$data->setPodcastList($out);
-		reply(array('ok' => true, 'podcasts' => array_values($data->getPodcastList())));
+		reply(array('ok' => true, 'podcasts' => withLocalLogos(array_values($data->getPodcastList()))));
 
 	case 'search':
 		$rb = new RadioBrowser($id);
@@ -309,7 +309,7 @@ switch($action){
 		if(is_null($rel) || !is_dir(Music::abs($rel))) reply(array('ok' => false, 'error' => 'That folder is not in the music library any more'), 404);
 		$e = Music::entries($rel);
 		$mac = rawurlencode(Id::getTableData()['ids'][strval($id)][0] ?? '');
-		$play = fn($mid2) => '../music.php?id=' . $mid2 . '&mac=' . $mac;
+		$play = fn($mid2) => '../music.php?id=' . $mid2 . '&mac=' . $mac . '&web=1'; // web=1: not the radio playing (NowPlaying)
 		$crumbs = array(); $acc = '';
 		foreach($rel === '' ? array() : explode('/', $rel) as $part){
 			$acc = ltrim($acc . '/' . $part, '/');
@@ -357,6 +357,24 @@ switch($action){
 		if(!is_string($bytes) || !RadioLogo::validPng($bytes)) reply(array('ok' => false, 'error' => 'That picture could not be used (it must be a PNG of at most 512 px)'), 400);
 		Music::setArt($rel, $bytes);
 		reply(array('ok' => true, 'art' => musicArt($rel)));
+
+	// what each radio is playing: live = a stream through phobos (sure), last = the last one started
+	case 'nowplaying':
+		$out = array();
+		foreach(knownRadios() as $r){
+			$live = NowPlaying::get($r['id']);
+			if(!is_null($live)) unset($live['token']);
+			$rec = (new Recent($r['id']))->list();
+			$last = null;
+			if(!empty($rec)){
+				$e = $rec[0];
+				$lf = empty($e['logo']) ? null : RadioLogo::localFile($e['logo']);
+				$last = array('name' => $e['name'], 'time' => $e['time'], 'kind' => $e['kind'],
+					'logo' => is_null($lf) ? ($e['logo'] ?? '') : '../media/logos/' . $lf);
+			}
+			$out[] = array('id' => $r['id'], 'name' => $r['name'] !== '' ? $r['name'] : 'Radio ' . $r['id'], 'live' => $live, 'last' => $last);
+		}
+		reply(array('ok' => true, 'now' => time(), 'radios' => $out));
 
 	case 'probe':
 		reply(probe(str($_GET['url'] ?? '')));
@@ -406,7 +424,7 @@ function podcastSearch(string $q) : array {
 			'name' => mb_substr($title, 0, 200),
 			'url' => $url,
 			'author' => mb_substr(trim(str($o['artistName'] ?? '')), 0, 200),
-			'logo' => str($o['artworkUrl100'] ?? ''),
+			'logo' => preg_replace('#/100x100bb\.#', '/600x600bb.', str($o['artworkUrl100'] ?? '')), // a sharper picture
 			'genre' => str($o['primaryGenreName'] ?? ''),
 			'episodes' => intval($o['trackCount'] ?? 0)
 		);

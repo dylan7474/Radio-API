@@ -202,6 +202,7 @@ async function load() {
 	}
 	$("#logout").hidden = S.radioCount < 2;
 	loadRecent();
+	loadNow();
 	$("#login").hidden = true;
 	$("#app").hidden = false;
 	renderAll();
@@ -547,7 +548,7 @@ function renderPodcasts() {
 		g.idx.forEach((i, pos) => {
 			const p = S.podcasts[i];
 			const li = el("li", { class: "item", "data-i": i },
-				logoBox("", p.name),
+				logoBox(p.logo_local || p.logo, p.name),
 				el("div", { class: "info" },
 					el("b", { text: p.name }),
 					el("small", { text: p.url }),
@@ -579,6 +580,10 @@ function editPodcast(i) {
 			name: f.name.value.trim(), url: f.url.value.trim(), type: f.nc.checked ? "nc" : "rss",
 			finalurl: f.finalurl.checked, proxy: f.proxy.checked, category: f.category.value.trim()
 		};
+		// same feed: keep its picture (a new feed address: phobos looks up the new feed's picture on Save)
+		const old = i === null ? null : S.podcasts[i];
+		if (old && old.sid !== undefined) item.sid = old.sid;
+		if (old && old.url === item.url && "logo" in old) { item.logo = old.logo; if (old.logo_local) item.logo_local = old.logo_local; }
 		if (i === null) S.podcasts.push(item); else S.podcasts[i] = item;
 		renderAll();
 	};
@@ -598,7 +603,7 @@ $("#podSearch").addEventListener("submit", async (e) => {
 			const have = S.podcasts.some(x => x.url === p.url);
 			const btn = el("button", { class: have ? "" : "primary", text: have ? "✓ In your list" : "+ Add", disabled: have ? true : null,
 				onclick: () => {
-					S.podcasts.push({ name: p.name, url: p.url, type: "rss", finalurl: false, proxy: false, category: "" });
+					S.podcasts.push({ name: p.name, url: p.url, logo: p.logo || "", type: "rss", finalurl: false, proxy: false, category: "" });
 					btn.textContent = "✓ Added"; btn.disabled = true; btn.className = "";
 					renderAll();
 					toast(`Added "${p.name}". Press Save to send it to the radio.`);
@@ -823,6 +828,48 @@ async function togglePlay(key, item, resolved = false) {
 audio.addEventListener("error", () => { if (S.playingKey) $("#pNote").textContent = "✗ The stream stopped or cannot be played in a browser"; });
 
 document.addEventListener("visibilitychange", () => { if (!document.hidden && S.loadedOnce) loadRecent(); });
+
+/* ---------- Now playing: what each radio plays (sure only for streams through phobos) ---------- */
+
+let nowTimer = null;
+function clock(t) {
+	const d = new Date(t * 1000), today = new Date().toDateString() === d.toDateString();
+	return today ? d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+		: d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+async function loadNow() {
+	clearTimeout(nowTimer);
+	if (document.hidden || !S.loadedOnce) return;
+	try {
+		const d = await api("nowplaying");
+		renderNow(d.radios);
+	} catch (e) { /* keep the last view; try again later */ }
+	nowTimer = setTimeout(loadNow, 15000);
+}
+function renderNow(radios) {
+	const box = $("#nowBox");
+	box.hidden = !radios.length;
+	box.replaceChildren(...radios.map(r => {
+		const L = r.live, last = r.last;
+		if (L) {
+			const how = L.kind === "music" ? "music from phobos" : "converted on phobos";
+			return el("div", { class: "nowrow live" }, logoBox(L.art, L.name),
+				el("div", { class: "what" },
+					el("small", {}, el("span", { class: "state", text: "▶ Playing now" }), ` on the ${r.name} · since ${clock(L.started)} · ${how}`),
+					el("b", { text: L.name }), L.detail ? el("small", { text: L.detail }) : null));
+		}
+		if (last) {
+			const direct = last.kind !== "mu";
+			return el("div", { class: "nowrow", title: direct ? "The radio plays internet stations straight from the station, so phobos only sees them start: it may have stopped or been switched off since." : "" },
+				logoBox(last.logo, last.name),
+				el("div", { class: "what" },
+					el("small", {}, el("span", { class: "state", text: "Last started" }), ` on the ${r.name} · ${clock(last.time)}` + (direct ? " · may have stopped since" : "")),
+					el("b", { text: last.name })));
+		}
+		return el("div", { class: "nowrow" }, logoBox("", r.name), el("div", { class: "what" }, el("small", { text: `The ${r.name}` }), el("b", { text: "Nothing played yet" })));
+	}));
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) loadNow(); });
 
 /* ---------- Music tab: the library on phobos (the radios' Music menu), with covers ---------- */
 

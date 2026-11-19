@@ -39,6 +39,8 @@ jar=$(mktemp)
 curl -s -m10 -c "$jar" -b "$jar" -X POST -H 'Content-Type: application/json' -d '{"id":1}' "$BASE/app/api.php?a=pick" >/dev/null
 up=$(curl -s -m10 -b "$jar" -X POST -H 'Content-Type: application/json' \
   -d '{"png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGUlEQVR4nGMQMgn7TwlmGDVg1IBRA4aLAQCYX5sQG9SnPgAAAABJRU5ErkJggg=="}' "$BASE/app/api.php?a=logoupload")
+np=$(curl -s -m10 -b "$jar" "$BASE/app/api.php?a=nowplaying")
+echo "$np" | grep -q '"ok":true' && echo "$np" | grep -q '"radios":\[{' && ok "page Now playing answers" || bad "page Now playing answers"
 mus=$(curl -s -m30 -b "$jar" "$BASE/app/api.php?a=music")
 if docker exec "$C" sh -c '[ -d /music ] && [ -n "$(ls -A /music)" ]'; then
   echo "$mus" | grep -q '"ok":true' && echo "$mus" | grep -q '"dirs":\[{' && ok "page Music tab lists the library" || bad "page Music tab lists the library"

@@ -77,6 +77,9 @@ function metaBlock(string $title) : string {
 
 $untilMeta = $metaint;
 $gone = false;
+// "now playing" on the page: only for a radio, not the page's own player (&web=1)
+$np = empty($_GET['web']) ? new NowPlaying($radioId->getId()) : null;
+register_shutdown_function(function() use (&$np){ $np?->clear(); });
 $sent = 0;          // audio bytes sent (192 kbit/s = 24000 bytes a second)
 $started = null;
 
@@ -84,7 +87,7 @@ $started = null;
  * Run one ffmpeg and pass its MP3 on, with the now-playing text. False if the radio left.
  */
 function pipeOut(array $cmd, string $metaBlock) : bool {
-	global $icy, $metaint, $untilMeta, $sent, $started;
+	global $icy, $metaint, $untilMeta, $sent, $started, $np;
 	$proc = proc_open($cmd, array(0 => array('file', '/dev/null', 'r'), 1 => array('pipe', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
 	if( !is_resource($proc) ){
 		return true;
@@ -108,6 +111,7 @@ function pipeOut(array $cmd, string $metaBlock) : bool {
 		echo $chunk;
 		flush();
 		if( connection_aborted() ){ $stay = false; break; }
+		$np?->beat();
 	}
 	fclose($out);
 	if( proc_get_status($proc)['running'] ){
@@ -123,6 +127,7 @@ $metaBlock = '';
 foreach( $tracks as $t ){
 	$trackAlbum = $shuffling ? Music::albumOf($t) : $album;
 	$metaBlock = metaBlock(Music::title($t) . ($trackAlbum !== '' ? ' - ' . $trackAlbum : ''));
+	$np?->set('music', Music::title($t), $trackAlbum . ($shuffling ? ' (shuffle)' : ''), Music::artUrl($t, '../'));
 	// each track to MP3 (no ID3 tag / Xing header in the middle of the stream), at playing speed
 	// (FLAC converts ~50x faster): a radio that left is noticed within seconds, and nothing races
 	// ahead. The first track gets a 6 s head start so the radio starts quickly.
@@ -144,4 +149,5 @@ if( !$gone && !is_null($started) ){
 			'-c:a', 'libmp3lame', '-b:a', '192k', '-id3v2_version', '0', '-write_xing', '0', '-f', 'mp3', 'pipe:1'), $metaBlock);
 	}
 }
+$np?->clear();
 ?>

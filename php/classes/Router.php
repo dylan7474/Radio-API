@@ -180,7 +180,7 @@ class Router {
 				$ed['title'], $ed['episode']['title'],
 				$this->data->getPodcastURL($id, $eid, $this->radioId->getMac()),
 				$ed['episode']['desc'],
-				$ed['logo'],
+				$ed['logo'] ?: ($this->data->getById($id)['logo'] ?? ''),
 				status: $play ? OutputPlayStatus::Play : OutputPlayStatus::Full
 			);
 		}
@@ -240,7 +240,7 @@ class Router {
 				$pd['title'],
 				$this->unread->knownItemMark($id, $e['url']) . $e['title'],
 				$this->data->getPodcastURL($id, $eid, $this->radioId->getMac(), sloppy: true),
-				$e['desc'], $pd['logo'],
+				$e['desc'], $pd['logo'] ?: ($pod['logo'] ?? ''), // fork: else the picture kept with the podcast
 				!$this->unread->knownItem($id, $e['url']),
 				OutputPlayStatus::Info
 			);
@@ -284,7 +284,8 @@ class Router {
 					$id,
 					$item['name'],
 					Config::RADIO_DOMAIN . 'list?tid=3&id=' . $id,
-					sortKey: self::orderKey($item)
+					sortKey: self::orderKey($item),
+					logo: $item['logo'] ?? '' // fork: the podcast's picture
 				);
 			}
 			else if ($item['tid'] == 2 && !$item['live']) { // file based "own stream"

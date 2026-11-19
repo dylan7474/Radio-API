@@ -147,3 +147,14 @@ button.star.on { color: var(--warn); border-color: var(--warn); }
 .row.wrap { flex-wrap: wrap; }
 .item.folder-row { cursor: pointer; }
 @media (max-width: 560px) { .albumhead { grid-template-columns: 1fr; } .albumcover { width: 120px; height: 120px; } }
+
+/* Now playing (under the header) */
+.nowbox { max-width: 900px; margin: .7rem auto 0; padding: 0 16px; display: grid; gap: .35rem; }
+.nowrow { display: grid; grid-template-columns: 36px 1fr; gap: .6rem; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: .4rem .6rem; }
+.nowrow.live { border-left: 4px solid var(--ok); }
+.nowrow .logo { width: 36px; height: 36px; }
+.nowrow .what { min-width: 0; }
+.nowrow .what b { overflow-wrap: anywhere; }
+.nowrow small { display: block; color: var(--muted); }
+.nowrow .state { font-weight: 600; }
+.nowrow.live .state { color: var(--ok); }

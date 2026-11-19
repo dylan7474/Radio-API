@@ -116,6 +116,32 @@ class Data {
 	}
 
 	/**
+	 * fork: each podcast's picture ("logo"). A save without it (the classic /gui/) keeps the old one;
+	 * 	a podcast that never had one looked up (no "logo" key, or a new feed address) gets the
+	 * 	feed's picture once, else Apple's directory artwork for that feed (an empty "logo" then
+	 * 	means: there is none). Kept as a local file
+	 * 	like the station logos.
+	 */
+	private static function podcastLogos(array $list, array $old) : array {
+		$bySid = array();
+		foreach($old as $o){ if(isset($o['sid'])) $bySid[$o['sid']] = $o; }
+		foreach($list as &$p){
+			$before = $bySid[$p['sid']] ?? array();
+			$sameFeed = ($before['url'] ?? null) === ($p['url'] ?? null);
+			if(!array_key_exists('logo', $p) && $sameFeed && array_key_exists('logo', $before)){
+				$p['logo'] = $before['logo'];
+			}
+			if((!array_key_exists('logo', $p) || ($p['logo'] === '' && !$sameFeed)) && ($p['type'] ?? 'rss') === 'rss'){
+				$p['logo'] = PodcastLoader::findImage($p['url'] ?? '');
+				if($p['logo'] === '') $p['logo'] = PodcastLoader::itunesImage($p['name'] ?? '', $p['url'] ?? '');
+			}
+			if(!empty($p['logo'])) RadioLogo::storeLocal($p['logo']);
+		}
+		unset($p);
+		return $list;
+	}
+
+	/**
 	 * fork: a save that does not know the "fav" star or "relay" (the classic /gui/) keeps them,
 	 * 	and new addresses the radios can't play are converted (Relay::needed)
 	 */
@@ -325,7 +351,7 @@ class Data {
 		if(!$this->preloaded){
 			$this->preloadAll();
 		}
-		$this->podcasts = self::ensureSids($pods, $this->podcasts);
+		$this->podcasts = self::podcastLogos(self::ensureSids($pods, $this->podcasts), $this->podcasts);
 		file_put_contents( __DIR__ . '/../data/podcasts_'. $this->id .'.json', json_encode($this->podcasts, JSON_PRETTY_PRINT), LOCK_EX);
 		$this->constructTable(); // update redis
 	}

@@ -61,7 +61,8 @@ class OutputXML extends Output {
 	/**
 	 * Add a podcast
 	 */
-	public function addPodcast(int $podcastid, string $name, string $url, int|string $sortKey = "" ) : void {
+	public function addPodcast(int $podcastid, string $name, string $url, int|string $sortKey = "", string $logo = "" ) : void {
+		// (XML radios show no pictures in lists; the episodes carry the podcast's picture)
 		$this->items[] = array(
 			'ItemType' => 'ShowOnDemand',
 			'ShowOnDemandID' => $podcastid,

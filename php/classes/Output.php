@@ -88,7 +88,7 @@ abstract class Output {
 	 */
 	abstract public function addPodcast(
 		int $podcastid, string $name, string $url,
-		int|string $sortKey = ""
+		int|string $sortKey = "", string $logo = ""
 	) : void;
 
 	/**

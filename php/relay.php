@@ -81,6 +81,12 @@ if( $icy ){
 	header('icy-description: ' . preg_replace('/[^ -~]/', '', $station['desc'] ?? ''));
 }
 
+// "now playing" on the page (renewed while the radio listens, removed when it leaves)
+$np = new NowPlaying($radioId->getId());
+$lf = empty($station['logo']) ? null : RadioLogo::localFile($station['logo']);
+$np->set('relay', $station['name'] ?? 'Radio', $station['desc'] ?? '', is_null($lf) ? '' : '../media/logos/' . $lf);
+register_shutdown_function(function() use ($np){ $np->clear(); });
+
 $out = $pipes[1];
 $untilMeta = $metaint;
 while( !feof($out) ){
@@ -105,7 +111,9 @@ while( !feof($out) ){
 	if( connection_aborted() ){ // the radio stopped or changed station
 		break;
 	}
+	$np->beat();
 }
+$np->clear();
 
 // stop ffmpeg (and with it the source stream, e.g. so the receiver is free again)
 fclose($out);

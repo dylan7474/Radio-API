@@ -108,6 +108,63 @@ class PodcastLoader {
 	}
 
 	/**
+	 * fork: a podcast's picture from its feed's text: <itunes:image href>, else <image><url>, '' if none
+	 */
+	public static function feedImage(string $rss) : string {
+		$head = substr($rss, 0, ($p = stripos($rss, '<item')) === false ? 300000 : $p); // the channel, not an episode
+		if(preg_match('#<itunes:image[^>]*\bhref\s*=\s*["\']([^"\']+)["\']#i', $head, $m)) return html_entity_decode(trim($m[1]));
+		if(preg_match('#<image>.*?<url>\s*(?:<!\[CDATA\[)?\s*([^<\]]+?)\s*(?:\]\]>)?\s*</url>#is', $head, $m)) return html_entity_decode(trim($m[1]));
+		return '';
+	}
+
+	/**
+	 * fork: fetch a feed (at most 2 MB, 15 s) and give its picture's address, '' if none
+	 */
+	public static function findImage(string $feedUrl) : string {
+		if(!preg_match('#^https?://#i', $feedUrl)) return '';
+		$buf = '';
+		$ch = curl_init($feedUrl);
+		curl_setopt_array($ch, array(
+			CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
+			CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_TIMEOUT => 15,
+			CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; Radio-API/' . Config::VERSION . ')',
+			CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+			CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+			CURLOPT_WRITEFUNCTION => function($ch, $chunk) use (&$buf) {
+				$buf .= $chunk;
+				// the picture is near the top: stop at the first episode
+				return strlen($buf) > 2000000 || stripos($buf, '<item') !== false ? 0 : strlen($chunk);
+			}
+		));
+		curl_exec($ch);
+		unset($ch);
+		$img = self::feedImage($buf);
+		return preg_match('#^https?://#i', $img) ? $img : '';
+	}
+
+	/**
+	 * fork: a podcast's artwork from Apple's podcast directory (iTunes), for feeds without a picture:
+	 * 	searched by name, used only if a result has exactly this feed address. '' if none.
+	 */
+	public static function itunesImage(string $name, string $feedUrl) : string {
+		$name = trim($name);
+		if($name === '' || $feedUrl === '') return '';
+		$ch = curl_init('https://itunes.apple.com/search?' . http_build_query(array('media' => 'podcast', 'entity' => 'podcast', 'limit' => 25, 'term' => mb_substr($name, 0, 100))));
+		curl_setopt_array($ch, array(CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_TIMEOUT => 10,
+			CURLOPT_USERAGENT => 'Radio-API/' . Config::VERSION));
+		$j = json_decode((string) curl_exec($ch), true);
+		unset($ch);
+		$norm = fn($u) => rtrim(preg_replace('#^https?://#i', '', strtolower(trim($u))), '/');
+		foreach($j['results'] ?? array() as $r){
+			if($norm($r['feedUrl'] ?? '') === $norm($feedUrl)){
+				$img = (string) ($r['artworkUrl600'] ?? $r['artworkUrl100'] ?? '');
+				return preg_match('#^https?://#i', $img) ? $img : '';
+			}
+		}
+		return '';
+	}
+
+	/**
 	 * RSS/ Atom loader
 	 */
 	private static function loadFromFeed( string $url ) : array{
@@ -116,7 +173,8 @@ class PodcastLoader {
 				
 		$poddata = array(
 			'title' => is_array($data) ? ($data['channel']['title'] ?? '') : '',
-			'logo' => is_array($data) && isset( $data['channel']['image'] ) ? $data['channel']['image']['url'] : '',
+			'logo' => is_array($data) && isset( $data['channel']['image'] ) ? $data['channel']['image']['url']
+				: self::feedImage(is_string($rss) ? $rss : ''), // fork: many feeds only have <itunes:image>
 			'episodes' => array()
 		);
 
