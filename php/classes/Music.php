@@ -185,7 +185,26 @@ class Music {
 	public static function artUrl(string $rel, string $base = Config::RADIO_DOMAIN) : string {
 		$dir = self::isAudio($rel) ? dirname($rel) : $rel;
 		$f = self::cachedArt($dir);
+		if($base === Config::RADIO_DOMAIN && !is_null($f)){
+			// the radios: a plain PNG file, like the station logos they show (the Fitzwilliam
+			//	fetched music.php's JPEG over and over and never showed it: no Content-Length)
+			$png = self::radioPng($f);
+			if(!is_null($png)) return Config::RADIO_DOMAIN . 'media/music-art/radio/' . $png;
+		}
 		return $base . 'music.php?art=' . self::idFor($dir) . (is_null($f) ? '' : '&v=' . filemtime($f));
+	}
+
+	/**
+	 * A cover as the radios get it: media/music-art/radio/<cover name>-<its time>.png, at most
+	 * 	256 px, made once (a new cover = a new name, so no radio keeps showing an old one)
+	 */
+	private static function radioPng(string $cover) : ?string {
+		$name = pathinfo($cover, PATHINFO_FILENAME) . '-' . filemtime($cover) . '.png';
+		$dir = self::ART_DIR . '/radio';
+		if(is_file($dir . '/' . $name)) return $name;
+		if(!is_dir($dir) && !@mkdir($dir, 0755, true)) return null;
+		foreach(glob($dir . '/' . pathinfo($cover, PATHINFO_FILENAME) . '-*.png') ?: array() as $old) @unlink($old);
+		return RadioLogo::fileToPng($cover, $dir . '/' . $name) ? $name : null;
 	}
 
 	/**

@@ -201,6 +201,30 @@ class RadioLogo {
 	}
 
 	/**
+	 * fork: any picture file (JPEG, PNG, GIF) as a PNG of at most 256 px, written to $out.
+	 * 	(No GD here: wrapped in an SVG for rsvg-convert, as storeLocal does.) True if done.
+	 */
+	public static function fileToPng(string $in, string $out) : bool {
+		$bytes = @file_get_contents($in);
+		if(!is_string($bytes) || strlen($bytes) < 100) return false;
+		$mime = (string) (new finfo(FILEINFO_MIME_TYPE))->buffer($bytes);
+		if(!in_array($mime, array('image/png', 'image/jpeg', 'image/gif'), true)) return false;
+		list($w, $h) = self::imageDimensions($in);
+		if($w <= 0 || $h <= 0) return false;
+		$scale = min(1, 256 / max($w, $h));
+		$tw = max(1, (int) round($w * $scale)); $th = max(1, (int) round($h * $scale));
+		$svg = tempnam(sys_get_temp_dir(), 'svg');
+		file_put_contents($svg, "<svg xmlns='http://www.w3.org/2000/svg' width='".$tw."' height='".$th."' version='1.1'>"
+			. "<image href='data:".$mime.";base64,".base64_encode($bytes)."' width='".$tw."' height='".$th."'/></svg>");
+		$tmp = $out . '.tmp';
+		$rs = 0;
+		exec('rsvg-convert --format png -o ' . escapeshellarg($tmp) . ' ' . escapeshellarg($svg), result_code: $rs);
+		unlink($svg);
+		if($rs !== 0 || !is_file($tmp) || filesize($tmp) < 100){ @unlink($tmp); return false; }
+		return rename($tmp, $out);
+	}
+
+	/**
 	 * fork: a small PNG from the page (logo or album cover): real PNG, at most 512 px each way, < 2 MB
 	 */
 	public static function validPng(string $bytes) : bool {

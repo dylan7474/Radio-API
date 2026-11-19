@@ -28,6 +28,7 @@ if( isset($_GET['art']) ){
 	}
 	header('Content-Type: ' . (str_ends_with($file, '.png') ? 'image/png' : 'image/jpeg'));
 	header('Cache-Control: max-age=86400');
+	header('Content-Length: ' . filesize($file));
 	readfile($file);
 	die();
 }
