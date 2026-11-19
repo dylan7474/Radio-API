@@ -325,7 +325,7 @@ class Router {
 			$all = Music::tracksUnder($rel);
 			$this->out->addStation(Music::idFor($rel), 'Play all - ' . count($all) . ' tracks',
 				Config::RADIO_DOMAIN . 'music.php?id=' . Music::idFor($rel) . '&mac=' . $mac,
-				OutputPlayStatus::Info, logo: Config::RADIO_DOMAIN . 'music.php?art=' . Music::idFor($rel), sortKey: '0000');
+				OutputPlayStatus::Info, logo: Music::artUrl($rel), sortKey: '0000');
 		}
 		// shuffle: a folder with more than one track under it (album, artist), or the whole library
 		$under = $rel === '' ? -1 : count(Music::tracksUnder($rel));
@@ -333,12 +333,12 @@ class Router {
 			$label = $rel === '' ? 'Shuffle all music' : 'Shuffle - ' . $under . ' tracks';
 			$this->out->addStation(Music::shuffleIdFor($rel), $label,
 				Config::RADIO_DOMAIN . 'music.php?id=' . Music::shuffleIdFor($rel) . '&mac=' . $mac,
-				OutputPlayStatus::Info, logo: Config::RADIO_DOMAIN . 'music.php?art=' . Music::idFor($rel), sortKey: '0001');
+				OutputPlayStatus::Info, logo: Music::artUrl($rel), sortKey: '0001');
 		}
 		foreach($e['tracks'] as $n => $t){
 			$this->out->addStation(Music::idFor($t), Music::title($t),
 				Config::RADIO_DOMAIN . 'music.php?id=' . Music::idFor($t) . '&mac=' . $mac,
-				OutputPlayStatus::Info, logo: Config::RADIO_DOMAIN . 'music.php?art=' . Music::idFor($t),
+				OutputPlayStatus::Info, logo: Music::artUrl($t),
 				sortKey: sprintf('%04d', $n + 2));
 		}
 		if(count($e['dirs']) === 0 && count($e['tracks']) === 0){
@@ -362,7 +362,7 @@ class Router {
 		$name = $isDir ? ($rel === '' ? 'All music' : Music::albumOf($rel)) : Music::title($rel);
 		if($shuffle) $name = 'Shuffle: ' . $name;
 		$url = Config::RADIO_DOMAIN . 'music.php?id=' . $id . '&mac=' . $this->radioId->getMac();
-		$art = Config::RADIO_DOMAIN . 'music.php?art=' . Music::idFor($rel);
+		$art = Music::artUrl($rel);
 		$this->out->addStation($id, $name, $url,
 			status: $play ? OutputPlayStatus::Play : OutputPlayStatus::Full,
 			desc: $isDir ? ($rel === '' ? 'Your whole music library' : count(Music::tracksUnder($rel)) . ' tracks') : Music::albumOf($rel), logo: $art);
@@ -426,7 +426,7 @@ class Router {
 			else if($e['kind'] === 'mu' && !is_null(Music::pathFor($e['id']))){
 				$this->out->addStation($e['id'], $e['name'],
 					Config::RADIO_DOMAIN . 'music.php?id=' . $e['id'] . '&mac=' . $this->radioId->getMac(),
-					OutputPlayStatus::Info, logo: Config::RADIO_DOMAIN . 'music.php?art=' . $e['id'], sortKey: $key);
+					OutputPlayStatus::Info, logo: Music::artUrl(Music::pathFor($e['id'])), sortKey: $key);
 			}
 			else if($e['kind'] === 'rb' && RadioBrowser::matchStationID($e['id'])){
 				$url = Relay::needed($e['url']) ? Relay::rbUrl($e['id'], $this->radioId->getMac()) : $e['url'];

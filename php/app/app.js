@@ -64,7 +64,7 @@ async function api(action, { body, params } = {}, retried = false) {
 function logoBox(url, name) {
 	const box = el("div", { class: "logo", "aria-hidden": "true" });
 	const initial = (name || "?").trim().charAt(0).toUpperCase() || "?";
-	if (url && /^(https?:|\.\.\/media\/)/i.test(url)) {   // a web address, or phobos's stored copy
+	if (url && /^(https?:|\.\.\/media\/|\.\.\/music\.php)/i.test(url)) {   // a web address, phobos's stored copy, or an album cover
 		const img = el("img", { src: url, alt: "", loading: "lazy", referrerpolicy: "no-referrer" });
 		img.addEventListener("error", () => { box.textContent = initial; });
 		box.append(img);
@@ -194,6 +194,7 @@ async function load() {
 	S.loadedOnce = true;
 	S.radioId = d.id; S.radioCode = d.code; S.radioName = d.name;
 	S.share = d.share; S.checked = d.checked;
+	$("#musicTabBtn").hidden = !d.music;
 	showRadioName();
 	showShare();
 	if (S.radioCount === undefined) {
@@ -268,6 +269,7 @@ $$(".tabs button").forEach(b => b.addEventListener("click", () => {
 	$$(".tabs button").forEach(x => x.setAttribute("aria-selected", x === b ? "true" : "false"));
 	$$(".tab").forEach(t => t.hidden = t.id !== "tab-" + b.dataset.tab);
 	if (b.dataset.tab === "find") openFind();
+	if (b.dataset.tab === "music" && !M.cur) openMusic("");
 }));
 
 /* ---------- grouping (top level first, then folders in order of first use) ---------- */
@@ -785,6 +787,7 @@ function refreshPlayButtons() {
 	renderStations();
 	if (S.results) renderResults($("#results"), S.results, "s");
 	if (S.recent) renderRecent();
+	if (M.cur) renderMusic();
 }
 
 async function togglePlay(key, item, resolved = false) {
@@ -820,6 +823,120 @@ async function togglePlay(key, item, resolved = false) {
 audio.addEventListener("error", () => { if (S.playingKey) $("#pNote").textContent = "✗ The stream stopped or cannot be played in a browser"; });
 
 document.addEventListener("visibilitychange", () => { if (!document.hidden && S.loadedOnce) loadRecent(); });
+
+/* ---------- Music tab: the library on phobos (the radios' Music menu), with covers ---------- */
+
+const M = { cur: null, missing: null };
+
+async function openMusic(id) {
+	$("#mStatus").textContent = "Loading…";
+	try {
+		M.cur = await api("music", { params: { id } });
+		M.missing = null;
+		$("#mStatus").textContent = "";
+		$("#mMsg").textContent = ""; $("#mMsg").className = "msg";
+		renderMusic();
+		window.scrollTo({ top: 0 });
+	} catch (err) { if (err.message !== "login") $("#mStatus").textContent = "✗ " + err.message; }
+}
+
+function renderMusic() {
+	const d = M.cur;
+	if (!d) return;
+	const crumbs = [el("button", { class: "quiet", text: "🎵 Music", onclick: () => openMusic("") })];
+	for (const c of d.crumbs) crumbs.push(el("span", { class: "sep", text: "›" }), el("button", { class: "quiet", text: c.name, onclick: () => openMusic(c.id) }));
+	$("#mCrumbs").replaceChildren(...crumbs);
+
+	// the folder's own header: cover, Play all, Shuffle, cover buttons (not for the top)
+	$("#mHead").hidden = M.missing !== null || !d.canCover;
+	if (d.canCover) {
+		const box = $("#mCoverBox");
+		box.replaceChildren(d.art ? el("img", { src: d.art, alt: "Cover of " + d.name }) : document.createTextNode((d.name || "?").charAt(0).toUpperCase()));
+		$("#mTitle").textContent = d.name;
+		$("#mCount").textContent = (d.count ? d.count + " track" + (d.count === 1 ? "" : "s") : "No tracks") + (d.art ? "" : " · no cover");
+		const pa = $("#mPlayAll"), sh = $("#mShuffle");
+		pa.hidden = !d.playAll; sh.hidden = !d.shuffle;
+		pa.textContent = S.playingKey === "mall" + d.id ? "■ Stop" : "▶ Play all";
+		sh.textContent = S.playingKey === "mshuf" + d.id ? "■ Stop" : "⤮ Shuffle";
+		$("#mRemove").hidden = !d.art;
+		$("#mUpload").textContent = d.art ? "Change cover…" : "Add a cover…";
+	}
+
+	const list = $("#mList");
+	if (M.missing !== null) {
+		list.replaceChildren(el("li", { class: "folder", text: M.missing.length ? `Albums without a cover (${M.missing.length})` : "Every album has a cover." }),
+			...M.missing.map(a => el("li", { class: "item folder-row", onclick: () => openMusic(a.id) },
+				logoBox("", a.name.split("/").pop()),
+				el("div", { class: "info" }, el("b", { text: a.name.split("/").pop() }), el("small", { text: a.name })),
+				el("div", { class: "acts" }, el("button", { text: "Open", onclick: (e) => { e.stopPropagation(); openMusic(a.id); } })))));
+		return;
+	}
+	const rows = [];
+	for (const f of d.dirs) rows.push(el("li", { class: "item folder-row", onclick: () => openMusic(f.id) },
+		logoBox(f.art, f.name),
+		el("div", { class: "info" }, el("b", { text: f.name })),
+		el("div", { class: "acts" }, el("button", { text: "Open", "aria-label": "Open " + f.name, onclick: (e) => { e.stopPropagation(); openMusic(f.id); } }))));
+	for (const t of d.tracks) {
+		const key = "m" + t.id;
+		rows.push(el("li", { class: "item" },
+			logoBox(d.art, t.name),
+			el("div", { class: "info" }, el("b", { text: t.name })),
+			el("div", { class: "acts" }, el("button", { class: S.playingKey === key ? "playing" : "", title: "Listen here", "aria-label": "Listen to " + t.name,
+				text: S.playingKey === key ? "■" : "▶", onclick: () => togglePlay(key, { name: t.name + " · " + d.name, url: t.url, logo_local: d.art || "" }) }))));
+	}
+	list.replaceChildren(...rows);
+	$("#mStatus").textContent = rows.length ? "" : "This folder is empty.";
+}
+
+$("#mPlayAll").addEventListener("click", () => { const d = M.cur; togglePlay("mall" + d.id, { name: "All of " + d.name, url: d.playAll, logo_local: d.art || "" }); });
+$("#mShuffle").addEventListener("click", () => { const d = M.cur; togglePlay("mshuf" + d.id, { name: d.name + " (shuffled)", url: d.shuffle, logo_local: d.art || "" }); });
+
+$("#mMissing").addEventListener("click", async () => {
+	$("#mStatus").textContent = "Looking through the library…";
+	try {
+		const d = await api("musicmissing");
+		M.missing = d.albums;
+		$("#mStatus").textContent = "";
+		$("#mHead").hidden = true;
+		renderMusic();
+	} catch (err) { if (err.message !== "login") $("#mStatus").textContent = "✗ " + err.message; }
+});
+
+// a cover from a picture on this computer/phone: drawn at most 256 px here, checked and kept on phobos
+$("#mUpload").addEventListener("click", () => $("#mFile").click());
+$("#mFile").addEventListener("change", async (e) => {
+	const file = e.target.files && e.target.files[0], m = $("#mMsg"), d = M.cur;
+	e.target.value = "";
+	if (!file || !d) return;
+	const url = URL.createObjectURL(file);
+	let img;
+	try { img = await loadImage(url); }
+	catch (err) { m.className = "msg bad"; m.textContent = "✗ This browser can't read that picture. Try a PNG or JPEG."; URL.revokeObjectURL(url); return; }
+	const w = img.naturalWidth || 256, h = img.naturalHeight || 256, sc = Math.min(1, 256 / Math.max(w, h));
+	const c = document.createElement("canvas");
+	c.width = Math.max(1, Math.round(w * sc)); c.height = Math.max(1, Math.round(h * sc));
+	c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+	URL.revokeObjectURL(url);
+	m.className = "msg"; m.textContent = "Sending the cover to phobos…";
+	try {
+		const r = await api("musicart", { body: { id: d.id, png: c.toDataURL("image/png") } });
+		if (M.cur !== d) return;
+		d.art = r.art;
+		m.className = "msg ok"; m.textContent = "✓ Cover saved. The radios show it too (it's kept on phobos).";
+		renderMusic();
+	} catch (err) { if (err.message !== "login") { m.className = "msg bad"; m.textContent = "✗ " + err.message; } }
+});
+
+$("#mRemove").addEventListener("click", async () => {
+	const d = M.cur, m = $("#mMsg");
+	if (!(await confirmBox(`Remove the cover of "${d.name}"? The radios then show the plain icon, and phobos won't look for a cover again (you can still add one here).`, "Remove"))) return;
+	try {
+		await api("musicart", { body: { id: d.id, remove: true } });
+		d.art = null;
+		m.className = "msg ok"; m.textContent = "✓ Cover removed.";
+		renderMusic();
+	} catch (err) { if (err.message !== "login") { m.className = "msg bad"; m.textContent = "✗ " + err.message; } }
+});
 
 /* ---------- start ---------- */
 

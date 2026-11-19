@@ -181,15 +181,7 @@ class RadioLogo {
 	 * 	small PNG.
 	 */
 	public static function storeUpload(string $bytes) : ?string {
-		if(strlen($bytes) < 60 || strlen($bytes) > 2000000 || substr($bytes, 0, 8) !== "\x89PNG\r\n\x1a\n"){
-			return null;
-		}
-		// the IHDR chunk has the size: at most 512 px each way
-		$size = unpack('Nw/Nh', substr($bytes, 16, 8));
-		if($size === false || $size['w'] < 1 || $size['h'] < 1 || $size['w'] > 512 || $size['h'] > 512){
-			return null;
-		}
-		if((string) (new finfo(FILEINFO_MIME_TYPE))->buffer($bytes) !== 'image/png'){
+		if(!self::validPng($bytes)){
 			return null;
 		}
 		if(!is_dir(self::LOCAL_DIR) && !@mkdir(self::LOCAL_DIR, 0755, true)){
@@ -206,6 +198,21 @@ class RadioLogo {
 			@chmod($file, 0644);
 		}
 		return $name;
+	}
+
+	/**
+	 * fork: a small PNG from the page (logo or album cover): real PNG, at most 512 px each way, < 2 MB
+	 */
+	public static function validPng(string $bytes) : bool {
+		if(strlen($bytes) < 60 || strlen($bytes) > 2000000 || substr($bytes, 0, 8) !== "\x89PNG\r\n\x1a\n"){
+			return false;
+		}
+		// the IHDR chunk has the size
+		$size = unpack('Nw/Nh', substr($bytes, 16, 8));
+		if($size === false || $size['w'] < 1 || $size['h'] < 1 || $size['w'] > 512 || $size['h'] > 512){
+			return false;
+		}
+		return (string) (new finfo(FILEINFO_MIME_TYPE))->buffer($bytes) === 'image/png';
 	}
 
 	private static function download(string $url) : string|false {

@@ -39,6 +39,10 @@ jar=$(mktemp)
 curl -s -m10 -c "$jar" -b "$jar" -X POST -H 'Content-Type: application/json' -d '{"id":1}' "$BASE/app/api.php?a=pick" >/dev/null
 up=$(curl -s -m10 -b "$jar" -X POST -H 'Content-Type: application/json' \
   -d '{"png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGUlEQVR4nGMQMgn7TwlmGDVg1IBRA4aLAQCYX5sQG9SnPgAAAABJRU5ErkJggg=="}' "$BASE/app/api.php?a=logoupload")
+mus=$(curl -s -m30 -b "$jar" "$BASE/app/api.php?a=music")
+if docker exec "$C" sh -c '[ -d /music ] && [ -n "$(ls -A /music)" ]'; then
+  echo "$mus" | grep -q '"ok":true' && echo "$mus" | grep -q '"dirs":\[{' && ok "page Music tab lists the library" || bad "page Music tab lists the library"
+fi
 rm -f "$jar"
 upfile=$(echo "$up" | grep -oP 'up-[0-9a-f]{40}\.png' | head -1)
 if [ -n "$upfile" ] && curl -sfI -m10 "$BASE/media/logos/$upfile" | grep -qi 'content-type: image/png'; then ok "logo upload"; else bad "logo upload ($up)"; fi

@@ -84,6 +84,23 @@ function shareInfo(int $id) : array {
 	);
 }
 
+// for the page: a music folder's cover address, or null. Albums (tracks or CDs inside) are
+//	looked at once (cover file, picture in the first track); artist folders only use a stored cover.
+function musicArt(string $rel) : ?string {
+	$has = Music::cachedArt($rel);
+	if(is_null($has)){
+		$e = Music::entries($rel, false);
+		$album = count($e['tracks']) > 0 || count(array_filter($e['dirs'], fn($d) => preg_match('/^(cd|disc|disk)\s*\d+$/i', basename($d)))) > 0;
+		$has = $album ? Music::art($rel) : null;
+		if(!$album){ // an artist's folder: the first of its albums that has a stored cover
+			foreach($e['dirs'] as $d){
+				if(!is_null(Music::cachedArt($d))) return Music::artUrl($d, '../');
+			}
+		}
+	}
+	return is_null($has) ? null : Music::artUrl($rel, '../');
+}
+
 // for the page: the nightly check's result for each station ("health"; none if never checked)
 function withHealth(array $list) : array {
 	$h = StationCheck::health();
@@ -177,6 +194,7 @@ switch($action){
 			'radios' => withHealth(withLocalLogos(array_values($data->getRadioList()))),
 			'podcasts' => array_values($data->getPodcastList()),
 			'share' => shareInfo($id),
+			'music' => Music::available(),
 			'checked' => is_file(__DIR__ . '/../data/station_health.json') ? filemtime(__DIR__ . '/../data/station_health.json') : 0,
 			'logoCache' => Config::USE_LOGO_CACHE,
 			'maxItems' => 999
@@ -282,6 +300,63 @@ switch($action){
 		$name = is_string($bytes) ? RadioLogo::storeUpload($bytes) : null;
 		if(is_null($name)) reply(array('ok' => false, 'error' => 'That picture could not be used (it must be a PNG of at most 512 px)'), 400);
 		reply(array('ok' => true, 'logo' => Config::DOMAIN . 'media/logos/' . $name, 'logo_local' => '../media/logos/' . $name));
+
+	// the music library, one folder: its folders (with covers) and tracks, for the Music tab
+	case 'music':
+		if(!Music::available()) reply(array('ok' => false, 'error' => 'No music library on phobos'), 404);
+		$mid = str($_GET['id'] ?? '');
+		$rel = $mid === '' ? '' : Music::pathFor($mid);
+		if(is_null($rel) || !is_dir(Music::abs($rel))) reply(array('ok' => false, 'error' => 'That folder is not in the music library any more'), 404);
+		$e = Music::entries($rel);
+		$mac = rawurlencode(Id::getTableData()['ids'][strval($id)][0] ?? '');
+		$play = fn($mid2) => '../music.php?id=' . $mid2 . '&mac=' . $mac;
+		$crumbs = array(); $acc = '';
+		foreach($rel === '' ? array() : explode('/', $rel) as $part){
+			$acc = ltrim($acc . '/' . $part, '/');
+			$crumbs[] = array('id' => Music::idFor($acc), 'name' => $part);
+		}
+		$all = $rel === '' ? 0 : count(Music::tracksUnder($rel));
+		reply(array(
+			'ok' => true,
+			'id' => $rel === '' ? '' : Music::idFor($rel),
+			'name' => $rel === '' ? 'Music' : basename($rel),
+			'crumbs' => $crumbs,
+			'art' => $rel === '' ? null : musicArt($rel),
+			'canCover' => $rel !== '',
+			'count' => $all,
+			'playAll' => $all > 0 ? $play(Music::idFor($rel)) : null,
+			'shuffle' => $all > 1 ? $play(Music::shuffleIdFor($rel)) : null,
+			'dirs' => array_map(fn($d) => array('id' => Music::idFor($d), 'name' => basename($d), 'art' => musicArt($d)), $e['dirs']),
+			'tracks' => array_map(fn($t) => array('id' => Music::idFor($t), 'name' => Music::title($t), 'url' => $play(Music::idFor($t))), $e['tracks'])
+		));
+
+	// album folders that have no cover (after the cover job and what's in the folders)
+	case 'musicmissing':
+		if(!Music::available()) reply(array('ok' => false, 'error' => 'No music library on phobos'), 404);
+		$out = array();
+		foreach(MusicCovers::albumFolders() as $rel){
+			if(!is_null(Music::cachedArt($rel)) || !is_null(Music::art($rel))) continue;
+			// one CD of a set: show the set (its cover is used for every CD)
+			$show = preg_match('/^(cd|disc|disk)\s*\d+$/i', basename($rel)) ? dirname($rel) : $rel;
+			$out[$show] = array('id' => Music::idFor($show), 'name' => $show);
+		}
+		reply(array('ok' => true, 'albums' => array_values($out)));
+
+	// a cover for a music folder from the page: {id, png: "data:image/png;base64,..."}; or {id, remove: true}
+	case 'musicart':
+		if(!$isPost) reply(array('ok' => false), 405);
+		$b = body();
+		$rel = Music::pathFor(str($b['id'] ?? ''));
+		if(is_null($rel) || $rel === '' || !is_dir(Music::abs($rel))) reply(array('ok' => false, 'error' => 'Not a music folder'), 404);
+		if(!empty($b['remove'])){
+			Music::removeArt($rel);
+			reply(array('ok' => true, 'art' => null));
+		}
+		$png = str($b['png'] ?? '');
+		$bytes = str_starts_with($png, 'data:image/png;base64,') ? base64_decode(substr($png, 22), true) : false;
+		if(!is_string($bytes) || !RadioLogo::validPng($bytes)) reply(array('ok' => false, 'error' => 'That picture could not be used (it must be a PNG of at most 512 px)'), 400);
+		Music::setArt($rel, $bytes);
+		reply(array('ok' => true, 'art' => musicArt($rel)));
 
 	case 'probe':
 		reply(probe(str($_GET['url'] ?? '')));

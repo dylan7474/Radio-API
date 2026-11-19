@@ -46,6 +46,7 @@ $v = htmlspecialchars(Config::VERSION);
 			<button role="tab" data-tab="stations" aria-selected="true">Stations</button>
 			<button role="tab" data-tab="find">Find stations</button>
 			<button role="tab" data-tab="podcasts">Podcasts</button>
+			<button role="tab" data-tab="music" id="musicTabBtn" hidden>Music</button>
 		</nav>
 		<span class="spacer"></span>
 		<a class="quiet" href="../gui/" title="The original page: merging radios, import and export">Classic page</a>
@@ -100,6 +101,31 @@ $v = htmlspecialchars(Config::VERSION);
 			<h2 class="listhead" id="podListHead">Your podcasts</h2>
 			<ol id="podcastList" class="items"></ol>
 			<p class="empty" id="podcastsEmpty" hidden>No podcasts yet. Add one with its RSS feed address.</p>
+		</div>
+
+		<div id="tab-music" class="tab" hidden>
+			<nav class="crumbs" id="mCrumbs" aria-label="Where you are in the music"></nav>
+			<div class="toolbar">
+				<button id="mMissing" type="button" title="Albums that have no cover yet, to add one">Albums without a cover</button>
+			</div>
+			<section id="mHead" class="albumhead" hidden>
+				<div class="albumcover" id="mCoverBox"></div>
+				<div>
+					<h2 id="mTitle"></h2>
+					<p class="hint" id="mCount"></p>
+					<div class="row wrap">
+						<button id="mPlayAll" type="button" class="primary">▶ Play all</button>
+						<button id="mShuffle" type="button">⤮ Shuffle</button>
+						<button id="mUpload" type="button" title="Use a picture from this computer or phone as the cover (the radios show it too)">Change cover…</button>
+						<button id="mRemove" type="button" title="For a wrong cover: the radios show the plain icon, and phobos won't look for one again">Remove cover</button>
+						<input type="file" id="mFile" accept="image/*" hidden>
+					</div>
+					<p class="msg" id="mMsg"></p>
+				</div>
+			</section>
+			<p class="hint">▶ plays in this browser only. On the radios: Internet Radio → Music.</p>
+			<div id="mStatus" class="msg"></div>
+			<ol id="mList" class="items"></ol>
 		</div>
 	</main>
 

@@ -68,6 +68,9 @@ class MusicCovers {
 			return 'had'; // (Music::art finds cover files and pictures inside the tracks)
 		}
 		$key = Music::idFor($rel);
+		if(is_file(self::ART_DIR . '/' . $key . '.removed')){
+			return 'skip'; // its cover was removed on the page: never fetch one again
+		}
 		if(!$this->retry && is_file(self::ART_DIR . '/' . $key . '.nocover')){
 			return 'skip';
 		}

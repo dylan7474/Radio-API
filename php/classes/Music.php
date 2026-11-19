@@ -159,6 +159,57 @@ class Music {
 		return implode(' - ', array_slice($parts, -2));
 	}
 
+	private const ART_DIR = __DIR__ . '/../media/music-art';
+
+	/**
+	 * The stored cover of a folder (or a track's folder), without looking anywhere else; null if none yet
+	 */
+	public static function cachedArt(string $rel) : ?string {
+		$dir = self::isAudio($rel) ? dirname($rel) : $rel;
+		$key = self::idFor($dir);
+		foreach(array('jpg', 'png') as $x){
+			if(is_file(self::ART_DIR . '/' . $key . '.' . $x)) return self::ART_DIR . '/' . $key . '.' . $x;
+		}
+		// one CD of a set: the set's cover
+		if(preg_match('/^(cd|disc|disk)\s*\d+$/i', basename($dir)) && $dir !== basename($dir)){
+			return self::cachedArt(dirname($dir));
+		}
+		return null;
+	}
+
+	/**
+	 * The address of a folder's (or track's) cover for the radios and the page. It carries the
+	 * 	cover's time ("&v="), so a changed cover is a new address and nothing shows the old one.
+	 * 	$base: Config::RADIO_DOMAIN for the radios, "../" for the page.
+	 */
+	public static function artUrl(string $rel, string $base = Config::RADIO_DOMAIN) : string {
+		$dir = self::isAudio($rel) ? dirname($rel) : $rel;
+		$f = self::cachedArt($dir);
+		return $base . 'music.php?art=' . self::idFor($dir) . (is_null($f) ? '' : '&v=' . filemtime($f));
+	}
+
+	/**
+	 * A cover chosen on the page (a checked PNG) for a folder: replaces any other
+	 */
+	public static function setArt(string $rel, string $png) : void {
+		if(!is_dir(self::ART_DIR)) @mkdir(self::ART_DIR, 0755, true);
+		$key = self::idFor($rel);
+		foreach(array('jpg', 'png', 'none', 'nocover', 'removed') as $x) @unlink(self::ART_DIR . '/' . $key . '.' . $x);
+		file_put_contents(self::ART_DIR . '/' . $key . '.png', $png);
+	}
+
+	/**
+	 * Remove a folder's cover (e.g. a wrong match): it shows the plain icon, and the cover job
+	 * 	(MusicCovers) never fetches one for it again (".removed"), until one is uploaded
+	 */
+	public static function removeArt(string $rel) : void {
+		if(!is_dir(self::ART_DIR)) @mkdir(self::ART_DIR, 0755, true);
+		$key = self::idFor($rel);
+		foreach(array('jpg', 'png', 'nocover') as $x) @unlink(self::ART_DIR . '/' . $key . '.' . $x);
+		touch(self::ART_DIR . '/' . $key . '.none');
+		touch(self::ART_DIR . '/' . $key . '.removed');
+	}
+
 	/**
 	 * Album art for a folder or track: a cover file in the folder (or the album above), else
 	 * 	the picture inside the first track (FLAC and MP3 often carry one). Stored in
@@ -170,6 +221,10 @@ class Music {
 		$key = self::idFor($dir);
 		foreach(array('jpg', 'png') as $x){
 			if(is_file($artDir . '/' . $key . '.' . $x)) return $artDir . '/' . $key . '.' . $x;
+		}
+		// one CD of a set (CD1, Disc 2): the set's own cover, if it has one (e.g. uploaded on the page)
+		if(preg_match('/^(cd|disc|disk)\s*\d+$/i', basename($dir)) && !is_null($set = self::cachedArt(dirname($dir)))){
+			return $set;
 		}
 		if(is_file($artDir . '/' . $key . '.none')) return null;
 		if(!is_dir($artDir)) @mkdir($artDir, 0755, true);
