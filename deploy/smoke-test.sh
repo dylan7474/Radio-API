@@ -19,7 +19,7 @@ echo "Radio-API smoke test ($(docker inspect -f '{{.Config.Image}}' "$C" 2>/dev/
 
 # 1. every PHP file parses (catches errors in pages that are rarely opened, like music.php);
 #    deprecation notices from upstream's code are not failures
-lint=$(docker exec "$C" sh -c 'find /php-code -name "*.php" -not -path "*/data/*" -exec php -l {} \; 2>&1 | grep -E "Parse error|Fatal error|Errors parsing"')
+lint=$(docker exec "$C" sh -c 'find /php-code -name "*.php" -not -path "*/data/*" -exec php -l {} \; 2>&1; php -l /music-covers.php 2>&1' | grep -E "Parse error|Fatal error|Errors parsing")
 [ -z "$lint" ] && ok "PHP files parse" || { bad "PHP files parse"; echo "$lint" | head -5; }
 
 # 2. the tools the fork needs are in the image

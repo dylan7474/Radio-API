@@ -45,7 +45,7 @@ Tested with a Majority Fitzwilliam 2 (JSON API) and a Roberts radio (older XML A
 	- artist / album / track browsing
 	- **Play all** and **Shuffle** for any folder, plus **Shuffle all music**
 	- each track converted to one MP3 192k stream at playing speed, with the track name as the now-playing text
-	- album art from cover files or embedded pictures.
+	- album art from cover files or embedded pictures, and for the rest **covers from MusicBrainz / the Cover Art Archive**: `docker exec --user www-data radio_api php /music-covers.php` (`--dry-run`, `--retry`, `--limit N`). It finds the exact CD by its disc ID tag (`MUSICBRAINZ_DISCID`), else searches by album and artist (only matches of 90% or more), and stores 250 px covers in `media/music-art/`.
 - **An empty list no longer breaks a JSON radio.** It shows a hint line instead (an empty list made the Majority report "network error").
 
 ### Running it
