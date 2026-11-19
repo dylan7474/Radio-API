@@ -25,7 +25,7 @@ class Data {
 	 * @param $preload Load all JSON from disk, else redis is used if available
 	 */
 	public function __construct(int $id, bool $preload = false ){
-		$this->id = $id;
+		$this->id = ListShare::ownerOf($id); // fork: a radio may use another radio's list (ListShare)
 		// fork: ".v2" because items are now keyed by their stable "sid" (old cache was keyed by position)
 		$this->redis = new Cache('radios_podcasts.v2.' . $this->id );
 		$this->own_streams = new OwnStreams();

@@ -63,6 +63,8 @@ $v = htmlspecialchars(Config::VERSION);
 				<ol id="recentList" class="items results"></ol>
 			</details>
 			<p class="hint">The radios show ★ Favourites and Recently played at the top of the menu, then folders, then your stations A–Z, as here.</p>
+			<p class="hint shareNote" id="shareNote" hidden></p>
+			<p class="hint" id="checkNote" hidden></p>
 			<p class="hint" id="presetHint" hidden>⚠ You deleted a station. If it was on a preset, that preset stops working until you store a new one on it.</p>
 			<ol id="stationList" class="items"></ol>
 			<p class="empty" id="stationsEmpty" hidden>No stations yet. Use <b>Find stations</b> or <b>+ Add a station</b>.</p>
@@ -180,9 +182,13 @@ $v = htmlspecialchars(Config::VERSION);
 
 <dialog id="renameDlg">
 	<form method="dialog" id="renameForm" class="dlg">
-		<h2>Name this radio</h2>
+		<h2>This radio</h2>
 		<label>Name <input name="name" maxlength="60" placeholder="e.g. Kitchen"></label>
 		<p class="hint">Only used on this page, to tell radios apart. Code <b id="renameCode"></b>.</p>
+		<label>Stations and podcasts
+			<select name="share"></select>
+		</label>
+		<p class="hint" id="shareHint"></p>
 		<div class="dlgbtns">
 			<button type="button" class="quiet cancelBtn">Cancel</button>
 			<button value="ok" class="primary">OK</button>

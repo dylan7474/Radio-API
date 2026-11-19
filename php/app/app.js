@@ -112,7 +112,9 @@ async function showLogin(msg = "") {
 	$("#pickList").replaceChildren(...radios.map(r => el("li", {},
 		el("button", { onclick: () => choose(r) },
 			el("b", { text: radioLabel(r) }),
-			el("small", { text: `${r.stations} station${r.stations === 1 ? "" : "s"} · code ${r.code}` })))));
+			el("small", { text: `${r.stations} station${r.stations === 1 ? "" : "s"}`
+				+ (r.shares ? " · shares the " + radioLabel(radios.find(o => o.id === r.shares) || { id: r.shares, name: "" }) + "'s list" : "")
+				+ ` · code ${r.code}` })))));
 	if (!radios.length) $("#pickMsg").textContent = "No radio has connected yet. Turn the radio on and open Internet Radio, then reload this page.";
 }
 
@@ -144,6 +146,18 @@ $("#radioName").addEventListener("click", () => {
 	const dlg = $("#renameDlg"), f = $("#renameForm");
 	f.name.value = S.radioName || "";
 	$("#renameCode").textContent = S.radioCode || "";
+	const sh = S.share || { choices: [], followers: [] };
+	const was = sh.owner ? sh.owner.id : 0;
+	f.share.replaceChildren(el("option", { value: "0", text: "Its own list" }),
+		...sh.choices.map(c => el("option", { value: String(c.id), text: "The same list as the " + c.name })));
+	f.share.value = String(was);
+	const blocked = sh.followers.length > 0;
+	f.share.disabled = blocked || (!sh.choices.length && !was);
+	$("#shareHint").textContent = blocked
+		? "The " + sh.followers.map(x => x.name).join(" and ") + " use" + (sh.followers.length > 1 ? "" : "s") + " this radio's list, so it keeps its own. (Change that on the other radio.)"
+		: was ? "Choosing “Its own list” gives this radio a copy of the shared list as it is now; after that the two are separate again."
+		: sh.choices.length ? "Sharing a list: both radios show the same stations, podcasts and Favourites, and a change on one shows on both. Presets keep working. This radio's own list is kept, in case you stop sharing."
+		: "There is no other radio to share with yet.";
 	dlg.returnValue = "";
 	dlg.showModal();
 	dlg.onclose = async () => {
@@ -152,6 +166,14 @@ $("#radioName").addEventListener("click", () => {
 			const d = await api("rename", { body: { name: f.name.value } });
 			S.radioName = d.name;
 			showRadioName();
+			const want = Number(f.share.value);
+			if (want !== was) {
+				if ((isDirty("radios") || isDirty("podcasts"))
+					&& !(await confirmBox("You have unsaved changes. Change the list anyway and lose them?", "Change"))) return;
+				await api("share", { body: { owner: want } });
+				await load();
+				toast(want ? "This radio now uses the " + (sh.choices.find(c => c.id === want) || {}).name + "'s list" : "This radio has its own list again");
+			}
 		} catch (err) { if (err.message !== "login") toast("✗ " + err.message); }
 	};
 });
@@ -171,7 +193,9 @@ async function load() {
 	S.moved = false;
 	S.loadedOnce = true;
 	S.radioId = d.id; S.radioCode = d.code; S.radioName = d.name;
+	S.share = d.share; S.checked = d.checked;
 	showRadioName();
+	showShare();
 	if (S.radioCount === undefined) {
 		try { S.radioCount = ((await (await fetch("api.php?a=who", { credentials: "same-origin" })).json()).radios || []).length; } catch (e) { S.radioCount = 1; }
 	}
@@ -184,6 +208,7 @@ async function load() {
 
 function renderAll() {
 	renderStations();
+	showCheckNote();
 	if (S.recent) renderRecent();
 	renderPodcasts();
 	updateSavebar();
@@ -290,7 +315,8 @@ function renderStations() {
 						r.type === "nc" ? el("span", { class: "tag", text: "Nextcloud files" }) : null,
 						r.proxy ? el("span", { class: "tag", text: "through phobos" }) : null,
 						r.relay ? el("span", { class: "tag", text: "converted on phobos" }) : null,
-						changed ? el("span", { class: "tag state warn", text: "not saved" }) : null)),
+						changed ? el("span", { class: "tag state warn", text: "not saved" }) : null,
+					...healthTags(r))),
 				el("div", { class: "acts" },
 					r.type === "nc" ? null : el("button", {
 						class: S.playingKey === key ? "playing" : "", title: "Listen here", "aria-label": "Listen to " + r.name,
@@ -310,6 +336,38 @@ function renderStations() {
 }
 
 $("#filterStations").addEventListener("input", renderStations);
+
+/* the nightly station check (StationCheck.php): a station is "not working" after 2 failed nights */
+const shortDate = (t) => new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+function healthTags(r) {
+	const h = r.health;
+	if (!h || h.ok) return [];
+	const checked = "Last checked " + new Date(h.last * 1000).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + ": " + h.note;
+	if (h.fails < 2) return [el("span", { class: "tag state warn", title: checked + ". It's checked again tonight.", text: "didn't answer last check" })];
+	const out = [el("span", { class: "tag state bad", title: checked, text: "✗ not working since " + shortDate(h.since) })];
+	if (h.suggest) out.push(el("button", { class: "small", title: "Radio-Browser has a working station with the same name at " + h.suggest.url + ". Press to use it, then Save.",
+		text: "Use the new address", onclick: () => {
+			r.url = h.suggest.url; delete r.health;
+			renderAll(); toast(`New address for "${r.name}". Press Save to keep it.`);
+		} }));
+	return out;
+}
+function showCheckNote() {
+	const bad = S.radios.filter(r => r.health && !r.health.ok && r.health.fails >= 2).length;
+	const n = $("#checkNote");
+	n.hidden = !S.checked;
+	if (S.checked) n.textContent = "phobos checks every station each night (last check " + shortDate(S.checked) + "): "
+		+ (bad ? bad + " not working, marked ✗ below." : "all answered.");
+}
+
+/* sharing one list between radios (ListShare.php) */
+function showShare() {
+	const sh = S.share || {}, n = $("#shareNote");
+	const others = (sh.followers || []).map(f => f.name).join(" and ");
+	n.hidden = !(sh.owner || others);
+	if (sh.owner) n.textContent = `🔗 Shared list: this radio uses the ${sh.owner.name}'s stations and podcasts. Changes here show on both radios.`;
+	else if (others) n.textContent = `🔗 Shared list: the ${others} also use${(sh.followers || []).length > 1 ? "" : "s"} this list. Changes here show on ${(sh.followers || []).length > 1 ? "all of them" : "both radios"}.`;
+}
 
 async function removeItem(kind, i) {
 	const it = S[kind][i];

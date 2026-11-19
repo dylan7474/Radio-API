@@ -29,6 +29,12 @@ fi;
 #	init redis with env vars
 php /startup.php 
 
+#	fork: nightly jobs (station check) run from crond, which doesn't pass on the container's
+#	settings: keep them in a file the job loads (see /etc/periodic/daily/station-check)
+export -p | grep -E ' (CONF_[A-Z_]+|DOCKER_MODE)=' > /etc/radio-api.env
+chmod 644 /etc/radio-api.env
+crond -b -l 8 -L /dev/null
+
 #	file permissions
 chown -R www-data:www-data /php-code/data/
 chown -R www-data:www-data /php-code/media/

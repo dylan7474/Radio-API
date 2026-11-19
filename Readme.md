@@ -46,6 +46,11 @@ Tested with a Majority Fitzwilliam 2 (JSON API) and a Roberts radio (older XML A
 	- **Play all** and **Shuffle** for any folder, plus **Shuffle all music**
 	- each track converted to one MP3 192k stream at playing speed, with the track name as the now-playing text
 	- album art from cover files or embedded pictures, and for the rest **covers from MusicBrainz / the Cover Art Archive**: `docker exec --user www-data radio_api php /music-covers.php` (`--dry-run`, `--retry`, `--limit N`). It finds the exact CD by its disc ID tag (`MUSICBRAINZ_DISCID`), else searches by album and artist (only matches of 90% or more), and stores 250 px covers in `media/music-art/`.
+- **Radios can share one list** (`classes/ListShare.php`, `data/list_links.json`). In the page's *This radio* dialog (press the radio's name), choose "The same list as …": both radios then show and edit the same stations, podcasts and Favourites. Station ids stay the same, so presets keep working. Recently played stays per radio. The follower's own list is kept; going back to "Its own list" gives it a copy of the shared list as it is then.
+- **Nightly station check** (`classes/StationCheck.php`, `utils/station-check.php`). crond in the container checks every station at 02:00 (UTC); results are in `data/station_health.json` and the last run in `data/station-check.log`.
+	- After 2 failed nights in a row a station is marked "✗ not working" on the page. If Radio-Browser has a working station with exactly the same name at another address, the page offers "Use the new address".
+	- Addresses on the home network are never checked, because a probe would retune an SDR receiver.
+	- Run it by hand: `docker exec --user www-data radio_api php /station-check.php`.
 - **An empty list no longer breaks a JSON radio.** It shows a hint line instead (an empty list made the Majority report "network error").
 
 ### Running it
@@ -62,6 +67,7 @@ The image is built on a **pinned** `kimbtechnologies/php_nginx` tag. Change it o
 ### Deploying (phobos) and testing
 - `deploy/deploy-phobos.sh` builds `origin/master` on the server and switches `~/radio-api/compose.yaml` to the new image. It then checks:
 	- the health check and the classic GUI
+	- that the nightly jobs are scheduled
 	- `deploy/smoke-test.sh`, which covers every known radio's XML and JSON menus, the page and its API, a logo upload, `relay.php`, the Music menu (4 s of real playback) and that ffmpeg stops when the listener leaves.
 
   If any check fails, it switches back to the previous image. It keeps only the current and the previous image.

@@ -50,18 +50,48 @@ function knownRadios() : array {
 	$table = Id::getTableData();
 	$names = radioNames();
 	$out = array();
+	$links = ListShare::links();
 	foreach($table['ids'] ?? array() as $rid => $v){
 		if(!is_array($v) || empty($v[1])) continue;
-		$file = __DIR__ . '/../data/radios_' . intval($rid) . '.json';
+		$owner = $links[intval($rid)] ?? intval($rid);
+		$file = __DIR__ . '/../data/radios_' . $owner . '.json';
 		$list = is_file($file) ? json_decode(file_get_contents($file), true) : array();
 		$out[] = array(
 			'id' => intval($rid),
 			'code' => $v[1],
 			'name' => $names[strval($rid)] ?? '',
-			'stations' => is_array($list) ? count($list) : 0
+			'stations' => is_array($list) ? count($list) : 0,
+			'shares' => $owner !== intval($rid) ? $owner : 0 // uses this radio's list (0 = its own)
 		);
 	}
 	return $out;
+}
+
+// for the page: which list this radio uses, who else uses it, and what it could share
+function shareInfo(int $id) : array {
+	$radios = knownRadios();
+	$names = array();
+	foreach($radios as $r) $names[$r['id']] = $r['name'];
+	$name = fn($rid) => ($names[$rid] ?? '') !== '' ? $names[$rid] : 'Radio ' . $rid;
+	$owner = ListShare::ownerOf($id);
+	$links = ListShare::links();
+	return array(
+		'owner' => $owner !== $id ? array('id' => $owner, 'name' => $name($owner)) : null,
+		'followers' => array_map(fn($f) => array('id' => $f, 'name' => $name($f)), ListShare::followers($id)),
+		// radios whose list this one could use: not itself, and not one that uses another's list
+		'choices' => array_values(array_map(fn($r) => array('id' => $r['id'], 'name' => $name($r['id'])),
+			array_filter($radios, fn($r) => $r['id'] !== $id && !isset($links[$r['id']]))))
+	);
+}
+
+// for the page: the nightly check's result for each station ("health"; none if never checked)
+function withHealth(array $list) : array {
+	$h = StationCheck::health();
+	foreach($list as &$r){
+		if(isset($h[$r['url'] ?? ''])) $r['health'] = $h[$r['url']];
+	}
+	unset($r);
+	return $list;
 }
 
 // for the page: "logo_local" = phobos's stored copy of the logo (or "" if it couldn't be stored yet)
@@ -124,6 +154,13 @@ switch($action){
 		file_put_contents(__DIR__ . '/../data/radio_names.json', json_encode($names, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX);
 		reply(array('ok' => true, 'name' => $names[strval($id)] ?? ''));
 
+	// use another radio's list of stations and podcasts ({owner: id}), or its own again ({owner: 0})
+	case 'share':
+		if(!$isPost) reply(array('ok' => false), 405);
+		$err = ListShare::set($id, intval(body()['owner'] ?? 0));
+		if(!is_null($err)) reply(array('ok' => false, 'error' => $err), 400);
+		reply(array('ok' => true, 'share' => shareInfo($id)));
+
 	case 'logout':
 		$login->logout();
 		reply(array('ok' => true));
@@ -137,8 +174,10 @@ switch($action){
 			'id' => $id,
 			'name' => radioNames()[strval($id)] ?? '',
 			'version' => Config::VERSION,
-			'radios' => withLocalLogos(array_values($data->getRadioList())),
+			'radios' => withHealth(withLocalLogos(array_values($data->getRadioList()))),
 			'podcasts' => array_values($data->getPodcastList()),
+			'share' => shareInfo($id),
+			'checked' => is_file(__DIR__ . '/../data/station_health.json') ? filemtime(__DIR__ . '/../data/station_health.json') : 0,
 			'logoCache' => Config::USE_LOGO_CACHE,
 			'maxItems' => 999
 		));
@@ -166,7 +205,7 @@ switch($action){
 		}
 		$data = new Data($id);
 		$data->setRadioList($out);
-		reply(array('ok' => true, 'radios' => withLocalLogos(array_values($data->getRadioList()))));
+		reply(array('ok' => true, 'radios' => withHealth(withLocalLogos(array_values($data->getRadioList())))));
 
 	case 'podcasts':
 		if(!$isPost) reply(array('ok' => false), 405);
@@ -356,61 +395,6 @@ function imageType(string $url) : ?string {
  * which stream does it point at. Reads at most 32 KB.
  */
 function probe(string $url, int $depth = 0) : array {
-	if(!filter_var($url, FILTER_VALIDATE_URL) || !preg_match('#^https?://#i', $url)){
-		return array('ok' => false, 'note' => 'Not an http(s) URL');
-	}
-	$buf = '';
-	$ch = curl_init($url);
-	curl_setopt_array($ch, array(
-		CURLOPT_FOLLOWLOCATION => true,
-		CURLOPT_MAXREDIRS => 5,
-		CURLOPT_CONNECTTIMEOUT => 5,
-		CURLOPT_TIMEOUT => 6,
-		CURLOPT_USERAGENT => 'Radio-API/' . Config::VERSION,
-		CURLOPT_HTTPHEADER => array('Icy-MetaData: 0'),
-		CURLOPT_SSL_VERIFYPEER => false,
-		CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-		CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-		CURLOPT_WRITEFUNCTION => function($ch, $chunk) use (&$buf) {
-			$buf .= $chunk;
-			return strlen($buf) > 32768 ? 0 : strlen($chunk); // stop early: streams never end
-		}
-	));
-	curl_exec($ch);
-	$status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-	$type = strtolower(explode(';', (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE))[0]);
-	$final = (string) curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
-	$err = curl_errno($ch);
-	unset($ch);
-
-	if($buf === '' && ($err !== 0 && $err !== CURLE_WRITE_ERROR)){
-		return array('ok' => false, 'note' => 'No answer from the server');
-	}
-	if($status >= 400){
-		return array('ok' => false, 'note' => 'Server says ' . $status);
-	}
-
-	$path = strtolower(parse_url($final, PHP_URL_PATH) ?? '');
-	$isPlaylist = preg_match('#(mpegurl|scpls|x-scpls|xspf)#', $type) || preg_match('#\.(m3u8?|pls|xspf)$#', $path)
-		|| (str_starts_with(ltrim($buf), '#EXTM3U') || str_starts_with(ltrim($buf), '[playlist]'));
-	$isHls = str_contains($buf, '#EXT-X-');
-
-	if($isPlaylist && !$isHls){
-		if($depth < 2 && preg_match('#(https?://[^\s"<>]+)#i', $buf, $m)){
-			$inner = probe($m[1], $depth + 1);
-			$inner['note'] = 'Playlist → ' . ($inner['note'] ?? '');
-			return $inner;
-		}
-		return array('ok' => false, 'note' => 'Playlist with no stream inside');
-	}
-
-	$audio = str_starts_with($type, 'audio/') || $type === 'application/ogg' || $type === 'video/mp2t' || $isHls;
-	return array(
-		'ok' => $audio,
-		'url' => $final,
-		'type' => $isHls ? 'HLS' : $type,
-		'note' => $audio ? ($isHls ? 'HLS stream (the radio may not play these)' : 'Stream answers (' . $type . ')')
-			: 'Answers, but it is not audio (' . ($type ?: 'unknown type') . ')'
-	);
+	return StationCheck::probe($url, $depth); // (the nightly station check uses the same test)
 }
 ?>

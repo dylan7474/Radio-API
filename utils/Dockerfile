@@ -18,7 +18,11 @@ RUN apk add --update --no-cache ffmpeg \
 # copy php files, nginx conf and startup scripts
 COPY --chown=www-data:www-data ./php/ /php-code/
 COPY ./utils/nginx.conf /etc/nginx/more-server-conf.conf 
-COPY ./utils/startup.php /utils/startup-before.sh ./utils/cron.php ./utils/music-covers.php /
+COPY ./utils/startup.php /utils/startup-before.sh ./utils/cron.php ./utils/music-covers.php ./utils/station-check.php /
+
+# fork: nightly station check at 02:00 (container time, UTC), run by crond (started in startup-before.sh)
+RUN printf '#!/bin/sh\n. /etc/radio-api.env\nsu -p -s /bin/sh www-data -c "/usr/local/bin/php /station-check.php" > /php-code/data/station-check.log 2>&1\n' > /etc/periodic/daily/station-check \
+	&& chmod 755 /etc/periodic/daily/station-check
 
 # backup default data dir
 RUN mkdir /data-dir-default/ \
