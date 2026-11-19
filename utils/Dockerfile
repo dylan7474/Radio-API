@@ -1,9 +1,12 @@
-FROM kimbtechnologies/php_nginx:latest 
+# fork: pinned (latest moved to PHP 8.6 ZTS without pecl on 2026-11-19 and broke the build); bump on purpose
+FROM kimbtechnologies/php_nginx:php-8.5.12
 
-# php redis support
-RUN apk add --update --no-cache $PHPIZE_DEPS \
+# php redis support (upstream's; the compiler is removed again: it was 349 MB of the image)
+RUN apk add --update --no-cache --virtual .build-deps $PHPIZE_DEPS \
 	&& pecl install redis \
-	&& docker-php-ext-enable redis
+	&& docker-php-ext-enable redis \
+	&& apk del --no-network .build-deps \
+	&& rm -rf /tmp/pear ~/.pearrc
 
 # SVG -> PNG convert
 RUN apk add --update --no-cache rsvg-convert

@@ -17,6 +17,56 @@ This redirect is possible by manipulating the DNS queries.
 
 &rarr; [Have a look at **screenshots**](./screenshots/Readme.md)
 
+## This fork (dylan7474/Radio-API)
+A fork of [KIMB-technologies/Radio-API](https://github.com/KIMB-technologies/Radio-API) for a home
+network, with extra features on top of the upstream code. Most changes live in new files
+(`php/app/`, `relay.php`, `music.php`, new classes), which keeps it easy to merge from upstream.
+Tested with a Majority Fitzwilliam 2 (JSON API) and a Roberts radio (older XML API).
+
+### What it adds
+- **A new web page at `/app/`** (the classic `/gui/` still works).
+	- On a LAN it **lists the radios to choose from**, so there's no GUI-Code to type (the code is still available as a fallback).
+	- Stations in folders, logos, an in-browser **Play/Test** button (playlists are resolved on the server), and an explicit Save with Undo.
+	- **Find** tab: Radio-Browser search (name, tag, country, order; broken stations hidden) and **podcast search** (iTunes Search API).
+	- The radios show the lists in A-Z order, folders first, with numbers sorted naturally (`80s` before `1940s`).
+- **Stable preset IDs.** Every station keeps its own id (`sid`), so deleting or reordering stations no longer moves the presets stored on the radio.
+- **Favourites and Recently played** on the radio's main menu. ★ a station on the page to add it to Favourites. Recently played holds the last 20 real plays per radio (`classes/Recent.php`).
+- **Convert on the server** (`relay.php`, `classes/Relay.php`).
+	- Streams a radio can't decode (HLS `.m3u8`, WAV) are converted to MP3 128k with ffmpeg, only while a radio is listening.
+	- It's switched on automatically for HLS addresses and for Radio-Browser HLS stations, and can be ticked by hand per station.
+	- It sends the now-playing text (ICY `StreamTitle`).
+- **Logos.**
+	- A neutral stand-in icon (`utils/art/station.svg`) instead of the upstream logo.
+	- A logo finder (Radio-Browser, exact name match).
+	- Every logo is stored as a local PNG in `media/logos/` (at most 256 px), so the radios never depend on the station's website.
+	- JSON radios get logos in the lists too.
+- **Music menu** (`music.php`, `classes/Music.php`). A music library mounted read-only at `/music` appears on the radio as *Music*:
+	- artist / album / track browsing
+	- **Play all** and **Shuffle** for any folder, plus **Shuffle all music**
+	- each track converted to one MP3 192k stream at playing speed, with the track name as the now-playing text
+	- album art from cover files or embedded pictures.
+- **An empty list no longer breaks a JSON radio.** It shows a hint line instead (an empty list made the Majority report "network error").
+
+### Running it
+Build the image from this repository. The upstream Docker Hub image doesn't include these features.
+```sh
+docker build -f utils/Dockerfile -t radio-api-dj .
+```
+Then use `docker-compose.yml` with `image: radio-api-dj` and these settings:
+- `CONF_USE_JSON_CACHE=true` (no Redis needed)
+- add a volume for the Music menu: `- "/path/to/music:/music:ro"`
+
+The image is built on a **pinned** `kimbtechnologies/php_nginx` tag. Change it on purpose, because `latest` has broken the build before.
+
+### Deploying (phobos) and testing
+- `deploy/deploy-phobos.sh` builds `origin/master` on the server and switches `~/radio-api/compose.yaml` to the new image. It then checks:
+	- the health check and the classic GUI
+	- `deploy/smoke-test.sh`, which covers every known radio's XML and JSON menus, the page and its API, `relay.php`, the Music menu (4 s of real playback) and that ffmpeg stops when the listener leaves.
+
+  If any check fails, it switches back to the previous image. It keeps only the current and the previous image.
+- Run the smoke test on its own at any time on the server: `~/src/Radio-API/deploy/smoke-test.sh`. It is read-only for the radios: it never sends `&play` and never starts a converted station.
+- Never push tags to this fork: upstream's `docker-build.yml` would try to publish them.
+
 ## Supported Devices
 Radio-API supports the XML-based API used by older Radios (roughly the ones supporting the UNDOK app) **and** the newer JSON-based API used by newer Radios (roughly the ones using the OKTIV app).
 
