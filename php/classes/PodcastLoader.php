@@ -118,7 +118,7 @@ class PodcastLoader {
 	}
 
 	/**
-	 * fork: fetch a feed (at most 2 MB, 15 s) and give its picture's address, '' if none
+	 * fork: fetch a feed (at most 2 MB, 30 s: some feeds, e.g. LibriVox, are slow) and give its picture's address, '' if none
 	 */
 	public static function findImage(string $feedUrl) : string {
 		if(!preg_match('#^https?://#i', $feedUrl)) return '';
@@ -126,7 +126,7 @@ class PodcastLoader {
 		$ch = curl_init($feedUrl);
 		curl_setopt_array($ch, array(
 			CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
-			CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_TIMEOUT => 15,
+			CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_TIMEOUT => 30,
 			CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; Radio-API/' . Config::VERSION . ')',
 			CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
 			CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,

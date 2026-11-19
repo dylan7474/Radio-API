@@ -131,9 +131,16 @@ class Data {
 			if(!array_key_exists('logo', $p) && $sameFeed && array_key_exists('logo', $before)){
 				$p['logo'] = $before['logo'];
 			}
-			if((!array_key_exists('logo', $p) || ($p['logo'] === '' && !$sameFeed)) && ($p['type'] ?? 'rss') === 'rss'){
+			if(!isset($p['logo_checked']) && $sameFeed && isset($before['logo_checked'])){
+				$p['logo_checked'] = $before['logo_checked'];
+			}
+			// look it up: never looked up, a new feed, or none found and the last try is a week old
+			//	(feeds and Apple's directory fail now and then: a miss is not for good)
+			$retry = ($p['logo'] ?? null) === '' && (!$sameFeed || time() - intval($p['logo_checked'] ?? 0) > 7 * 86400);
+			if((!array_key_exists('logo', $p) || $retry) && ($p['type'] ?? 'rss') === 'rss'){
 				$p['logo'] = PodcastLoader::findImage($p['url'] ?? '');
 				if($p['logo'] === '') $p['logo'] = PodcastLoader::itunesImage($p['name'] ?? '', $p['url'] ?? '');
+				$p['logo_checked'] = time();
 			}
 			if(!empty($p['logo'])) RadioLogo::storeLocal($p['logo']);
 		}

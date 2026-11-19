@@ -239,7 +239,8 @@ switch($action){
 				'proxy' => !empty($p['proxy']),
 				'type' => str($p['type'] ?? '') === 'nc' ? 'nc' : 'rss',
 				'category' => cleanCategory($p['category'] ?? '')
-			) + keepSid($p) + (array_key_exists('logo', $p) ? array('logo' => ($l = cleanUrl($p['logo'])) === 'invalid' ? '' : $l) : array());
+			) + keepSid($p) + (is_int($p['logo_checked'] ?? null) ? array('logo_checked' => $p['logo_checked']) : array())
+				+ (array_key_exists('logo', $p) ? array('logo' => ($l = cleanUrl($p['logo'])) === 'invalid' ? '' : $l) : array());
 			if(count($out) >= 999) break;
 		}
 		$data = new Data($id);
