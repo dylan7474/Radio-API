@@ -329,7 +329,9 @@ function editStation(i, preset = null) {
 	f.relay.checked = r.relay !== undefined ? !!r.relay : needsRelay(r.url);
 	$(".testMsg", f).textContent = ""; $(".testMsg", f).className = "msg testMsg";
 	$(".logoMsg", f).textContent = ""; $(".logoMsg", f).className = "msg logoMsg";
-	$(".logoPreview", f).src = /^https?:/i.test(r.logo || "") ? r.logo : "";
+	$(".logoPreview", f).src = r.logo_local || (/^https?:/i.test(r.logo || "") ? r.logo : "");
+	LG.src = null; LG.station = r; LG.seq++;
+	$(".logoBg", f).value = ""; $(".logoBgColour", f).hidden = true; $(".logoFile", f).value = "";
 	dlg.returnValue = "";
 	dlg.showModal();
 	dlg.onclose = () => {
@@ -361,7 +363,7 @@ $(".findLogoBtn", $("#stationForm")).addEventListener("click", async () => {
 	try {
 		const d = await api("findlogo", { params: { url: f.url.value.trim(), name: f.name.value.trim() } });
 		if (d.ok) {
-			f.logo.value = d.logo;
+			f.logo.value = d.logo; LG.src = null;
 			$(".logoPreview", f).src = d.logo;
 			m.className = "msg logoMsg ok"; m.textContent = "✓ Found one" + (d.note ? " (" + d.note.toLowerCase() + ")" : "") + ". Press OK to keep it.";
 		} else { m.className = "msg logoMsg bad"; m.textContent = "✗ " + d.note; }
@@ -370,7 +372,94 @@ $(".findLogoBtn", $("#stationForm")).addEventListener("click", async () => {
 
 $("#stationForm").logo.addEventListener("input", (e) => {
 	$(".logoPreview", $("#stationForm")).src = /^https?:\/\/.+/i.test(e.target.value) ? e.target.value : "";
+	LG.src = null; // a typed address replaces an uploaded picture
 });
+
+/* Upload a picture / put the logo on a background. Done in the browser: the picture is drawn at
+   at most 256 px (on a square of the chosen colour), sent to phobos as a PNG and kept in
+   media/logos/; the station's logo becomes that file's address. */
+const LG = { src: null, station: null, seq: 0, objUrl: null };
+
+function loadImage(url) {
+	return new Promise((ok, fail) => {
+		const img = new Image();
+		img.onload = () => ok(img);
+		img.onerror = () => fail(new Error("load"));
+		img.src = url;
+	});
+}
+
+// the picture to work from: an upload, else the logo phobos already keeps (same site, so it can be drawn)
+async function logoSource(f) {
+	if (LG.src) return LG.src;
+	const typed = f.logo.value.trim();
+	let url = null;
+	if (LG.station && typed === (LG.station.logo || "") && LG.station.logo_local) url = LG.station.logo_local;
+	else if (typed) { try { if (new URL(typed, location.href).origin === location.origin) url = typed; } catch (e) { /* not an address */ } }
+	if (!url) return null;
+	LG.src = await loadImage(url);
+	return LG.src;
+}
+
+function logoBackground(f) {
+	const v = $(".logoBg", f).value;
+	return v === "custom" ? $(".logoBgColour", f).value : v;
+}
+
+async function makeLogo() {
+	const f = $("#stationForm"), m = $(".logoMsg", f), seq = ++LG.seq;
+	let img;
+	try { img = await logoSource(f); } catch (e) { img = null; }
+	if (!img) {
+		m.className = "msg logoMsg bad";
+		m.textContent = f.logo.value.trim()
+			? "✗ phobos doesn't keep a copy of this logo yet. Press OK and Save first, then choose the background again (or upload a picture)."
+			: "✗ Upload a picture first.";
+		return;
+	}
+	const bg = logoBackground(f);
+	const w = img.naturalWidth || 256, h = img.naturalHeight || 256;   // (some SVGs have no size)
+	const c = document.createElement("canvas");
+	if (bg) {
+		// a square of the colour, the logo centred with a small margin
+		c.width = c.height = 256;
+		const s = Math.min(216 / w, 216 / h);
+		const ctx = c.getContext("2d");
+		ctx.fillStyle = bg; ctx.fillRect(0, 0, 256, 256);
+		ctx.drawImage(img, (256 - w * s) / 2, (256 - h * s) / 2, w * s, h * s);
+	} else {
+		const s = Math.min(1, 256 / Math.max(w, h));
+		c.width = Math.max(1, Math.round(w * s)); c.height = Math.max(1, Math.round(h * s));
+		c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+	}
+	m.className = "msg logoMsg"; m.textContent = "Sending the picture to phobos…";
+	try {
+		const d = await api("logoupload", { body: { png: c.toDataURL("image/png") } });
+		if (seq !== LG.seq) return; // the dialog changed in the meantime
+		f.logo.value = d.logo;
+		$(".logoPreview", f).src = d.logo_local;
+		m.className = "msg logoMsg ok"; m.textContent = "✓ Logo ready" + (bg ? " (on the background)" : "") + ". Press OK, then Save.";
+	} catch (err) {
+		if (err.message !== "login" && seq === LG.seq) { m.className = "msg logoMsg bad"; m.textContent = "✗ " + err.message; }
+	}
+}
+
+$(".uploadLogoBtn", $("#stationForm")).addEventListener("click", () => $(".logoFile", $("#stationForm")).click());
+$(".logoFile", $("#stationForm")).addEventListener("change", async (e) => {
+	const file = e.target.files && e.target.files[0], m = $(".logoMsg", $("#stationForm"));
+	if (!file) return;
+	if (LG.objUrl) URL.revokeObjectURL(LG.objUrl);   // the previous upload's (kept until now: it's drawn again for each background)
+	LG.objUrl = URL.createObjectURL(file);
+	try { LG.src = await loadImage(LG.objUrl); }
+	catch (err) { LG.src = null; m.className = "msg logoMsg bad"; m.textContent = "✗ This browser can't read that picture. Try a PNG or JPEG."; return; }
+	finally { e.target.value = ""; }   // so the same file can be chosen again
+	makeLogo();
+});
+$(".logoBg", $("#stationForm")).addEventListener("change", (e) => {
+	$(".logoBgColour", $("#stationForm")).hidden = e.target.value !== "custom";
+	makeLogo();
+});
+$(".logoBgColour", $("#stationForm")).addEventListener("change", makeLogo);
 $(".testBtn", $("#stationForm")).addEventListener("click", async () => {
 	const f = $("#stationForm"), m = $(".testMsg", f);
 	if (!f.url.value.trim()) { m.textContent = "Type a stream address first"; return; }

@@ -33,6 +33,16 @@ echo "$who" | grep -q '"ok":true' && ok "page API lists the radios" || bad "page
 check "classic /gui/ loads" bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' -m10 '$BASE/gui/')\" = 200 ]"
 check "stand-in logo served" bash -c "curl -sfI -m10 '$BASE/media/station.png' | grep -qi 'content-type: image/png'"
 
+# 3b. logo upload on the page (a fixed 16 px test picture; its file is removed again afterwards)
+jar=$(mktemp)
+curl -s -m10 -c "$jar" -b "$jar" -X POST -H 'Content-Type: application/json' -d '{"id":1}' "$BASE/app/api.php?a=pick" >/dev/null
+up=$(curl -s -m10 -b "$jar" -X POST -H 'Content-Type: application/json' \
+  -d '{"png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGUlEQVR4nGMQMgn7TwlmGDVg1IBRA4aLAQCYX5sQG9SnPgAAAABJRU5ErkJggg=="}' "$BASE/app/api.php?a=logoupload")
+rm -f "$jar"
+upfile=$(echo "$up" | grep -oP 'up-[0-9a-f]{40}\.png' | head -1)
+if [ -n "$upfile" ] && curl -sfI -m10 "$BASE/media/logos/$upfile" | grep -qi 'content-type: image/png'; then ok "logo upload"; else bad "logo upload ($up)"; fi
+[ -n "$upfile" ] && docker exec "$C" rm -f "/php-code/media/logos/$upfile"
+
 # 4. what each radio asks for: XML (mac) and JSON (radio id over https), for every known radio
 ids=$(docker exec "$C" php -r '$t=json_decode(file_get_contents("/php-code/data/table.json"),true); foreach(($t["ids"]??[]) as $i=>$v) echo $i," ",$v[0]??"-"," ",$v[2]??"-","\n";')
 [ -n "$ids" ] || bad "radios known (data/table.json)"

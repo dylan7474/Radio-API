@@ -234,6 +234,16 @@ switch($action){
 	case 'findlogo':
 		reply(findLogo(str($_GET['url'] ?? ''), str($_GET['name'] ?? ''), $id));
 
+	// a logo picture from the page: {png: "data:image/png;base64,..."} (made in the browser, at most
+	//	256 px, with its background) -> stored in media/logos/, its address goes in the station's logo
+	case 'logoupload':
+		if(!$isPost) reply(array('ok' => false), 405);
+		$png = str(body()['png'] ?? '');
+		$bytes = str_starts_with($png, 'data:image/png;base64,') ? base64_decode(substr($png, 22), true) : false;
+		$name = is_string($bytes) ? RadioLogo::storeUpload($bytes) : null;
+		if(is_null($name)) reply(array('ok' => false, 'error' => 'That picture could not be used (it must be a PNG of at most 512 px)'), 400);
+		reply(array('ok' => true, 'logo' => Config::DOMAIN . 'media/logos/' . $name, 'logo_local' => '../media/logos/' . $name));
+
 	case 'probe':
 		reply(probe(str($_GET['url'] ?? '')));
 

@@ -94,6 +94,10 @@ class RadioLogo {
 		if(empty($logo) || substr($logo, 0, 4) != 'http'){
 			return null;
 		}
+		// an uploaded logo (storeUpload) is already a file here: its address names it
+		if(preg_match('#^https?://[^/]+/media/logos/(up-[0-9a-f]{40}\.png)$#', $logo, $m) === 1){
+			return is_file(self::LOCAL_DIR . '/' . $m[1]) ? $m[1] : null;
+		}
 		$found = glob(self::LOCAL_DIR . '/' . sha1($logo) . '.*');
 		return empty($found) ? null : basename($found[0]);
 	}
@@ -168,6 +172,40 @@ class RadioLogo {
 		if(!is_null($tmp)) @unlink($tmp);
 		if($done) @chmod(self::LOCAL_DIR . '/' . $hash . '.' . ($ok ? 'png' : $exts[$mime]), 0644);
 		return $done;
+	}
+
+	/**
+	 * fork: a logo uploaded on the page (already a PNG of at most 256 px, made in the browser,
+	 * 	with the background the user chose). Stored as media/logos/up-<sha1 of the bytes>.png,
+	 * 	so the same picture twice is one file. Returns the file name, or null if it isn't a
+	 * 	small PNG.
+	 */
+	public static function storeUpload(string $bytes) : ?string {
+		if(strlen($bytes) < 60 || strlen($bytes) > 2000000 || substr($bytes, 0, 8) !== "\x89PNG\r\n\x1a\n"){
+			return null;
+		}
+		// the IHDR chunk has the size: at most 512 px each way
+		$size = unpack('Nw/Nh', substr($bytes, 16, 8));
+		if($size === false || $size['w'] < 1 || $size['h'] < 1 || $size['w'] > 512 || $size['h'] > 512){
+			return null;
+		}
+		if((string) (new finfo(FILEINFO_MIME_TYPE))->buffer($bytes) !== 'image/png'){
+			return null;
+		}
+		if(!is_dir(self::LOCAL_DIR) && !@mkdir(self::LOCAL_DIR, 0755, true)){
+			return null;
+		}
+		$name = 'up-' . sha1($bytes) . '.png';
+		$file = self::LOCAL_DIR . '/' . $name;
+		if(!is_file($file)){
+			$tmp = $file . '.tmp';
+			if(file_put_contents($tmp, $bytes) !== strlen($bytes) || !rename($tmp, $file)){
+				@unlink($tmp);
+				return null;
+			}
+			@chmod($file, 0644);
+		}
+		return $name;
 	}
 
 	private static function download(string $url) : string|false {

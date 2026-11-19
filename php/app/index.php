@@ -128,6 +128,19 @@ $v = htmlspecialchars(Config::VERSION);
 		<label>Logo address (optional)
 			<span class="row"><input name="logo" type="url" placeholder="http://…/logo.png"><button type="button" class="findLogoBtn" title="Look for this station's logo on Radio-Browser">Find</button><img class="logoPreview" alt=""></span>
 		</label>
+		<span class="row logoTools">
+			<button type="button" class="uploadLogoBtn" title="Use a picture from this computer or phone as the logo">Upload a picture…</button>
+			<input type="file" class="logoFile" accept="image/*" hidden>
+			<label class="inline">Background
+				<select class="logoBg" title="Put the logo on a square of this colour (for logos that are hard to see, like white on clear)">
+					<option value="">None (as it is)</option>
+					<option value="#ffffff">White</option>
+					<option value="#000000">Black</option>
+					<option value="custom">Colour…</option>
+				</select>
+			</label>
+			<input type="color" class="logoBgColour" value="#1f3b5c" title="Background colour" hidden>
+		</span>
 		<p class="msg logoMsg"></p>
 		<label>Description (optional) <input name="desc" maxlength="200"></label>
 		<label>Folder on the radio (optional) <input name="category" list="stationFolders" maxlength="100" placeholder="Leave empty for the top level"></label>

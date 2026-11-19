@@ -38,6 +38,7 @@ Tested with a Majority Fitzwilliam 2 (JSON API) and a Roberts radio (older XML A
 - **Logos.**
 	- A neutral stand-in icon (`utils/art/station.svg`) instead of the upstream logo.
 	- A logo finder (Radio-Browser, exact name match).
+	- **Upload a picture** as a station's logo, with an optional **background** (white, black or any colour) for logos that are hard to see, such as white on clear. It works on uploads and on logos phobos already stores. The picture is made in the browser (at most 256 px) and kept as `media/logos/up-<sha1>.png`.
 	- Every logo is stored as a local PNG in `media/logos/` (at most 256 px), so the radios never depend on the station's website.
 	- JSON radios get logos in the lists too.
 - **Music menu** (`music.php`, `classes/Music.php`). A music library mounted read-only at `/music` appears on the radio as *Music*:
@@ -61,7 +62,7 @@ The image is built on a **pinned** `kimbtechnologies/php_nginx` tag. Change it o
 ### Deploying (phobos) and testing
 - `deploy/deploy-phobos.sh` builds `origin/master` on the server and switches `~/radio-api/compose.yaml` to the new image. It then checks:
 	- the health check and the classic GUI
-	- `deploy/smoke-test.sh`, which covers every known radio's XML and JSON menus, the page and its API, `relay.php`, the Music menu (4 s of real playback) and that ffmpeg stops when the listener leaves.
+	- `deploy/smoke-test.sh`, which covers every known radio's XML and JSON menus, the page and its API, a logo upload, `relay.php`, the Music menu (4 s of real playback) and that ffmpeg stops when the listener leaves.
 
   If any check fails, it switches back to the previous image. It keeps only the current and the previous image.
 - Run the smoke test on its own at any time on the server: `~/src/Radio-API/deploy/smoke-test.sh`. It is read-only for the radios: it never sends `&play` and never starts a converted station.
